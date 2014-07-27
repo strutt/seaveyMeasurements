@@ -21,7 +21,14 @@ def test_CableResponses():
     plt.plot(crs.xpolFreqs[:N], x_dB[:N], label = 'Xpol cable response')
     plt.legend()
 
+    plt.figure()
     pure, dt_p, t0_p = getWaveform(dataDir + '140626_140317_ps_pulser_copol_fast_Ch1.csv', padToLength = pl)
+    direct, dt_d, t0_d = getWaveform(dataDir + '140626_134852_ps_pulser_direct_fast_Ch1.csv', padToLength = pl)
+    times1 = [t0_p + dt_p*i for i,j in enumerate(pure)]
+    times2 = [t0_d + dt_d*i for i,j in enumerate(direct)]
+    plt.plot(times1, pure, label = 'w/ cable')
+    plt.plot(times2, direct, label = 'w/o cable')
+    plt.legend()
 
     w, dt, t0 = getWaveform(dataDir + '140624_090559_rxp19_vpol_Ch1.csv', padToLength = pl)
     w2, dt2, t2 = getWaveform(dataDir + '140624_091751_rxp20_vpol_60dBatten_Ch1.csv', padToLength = pl)
@@ -45,17 +52,17 @@ def test_CableResponses():
     plt.figure()
 
     N = len(powSpec)
-    powSpec2 = [2*abs(z**2) for z in w3Pow[:N]]
-    powSpec2[0]/=2
-    powSpec2[-1]/=2
+    powSpec2 = [abs(z**2) for z in w3Pow[:N]]
+    #powSpec2[0]/=2
+    #powSpec2[-1]/=2
 
-    powSpec3 = [2*abs(z**2) for z in purePow[:N]]
+    powSpec3 = [2*abs(z**2) for z in crs.pulseFreqs[:N]]
     powSpec3[0]/=2
     powSpec3[-1]/=2
 
-    plt.plot(freqs[:N], [10*math.log10(z) if z > 0 else 0 for z in powSpec3], label = 'Pure pulser')
+    #plt.plot(freqs[:N], [10*math.log10(z) if z > 0 else 0 for z in powSpec3], label = 'Pure pulser')
     #plt.plot(crs.copolFreqs[:N], [10*math.log10(z) for z in powSpec], label = 'With cable')
-    plt.plot(freqs[:N], [10*math.log10(z) for z in powSpec2], label = 'Pulse through Seaveys - no cables')
+    plt.plot(freqs[:N], [10*math.log10(z) for z in powSpec2], label = 'Just seavey to seavey')
     #plt.plot(crs.copolFreqs[:N], [z for z in powSpec2], label = 'Cable removed')
     plt.legend()
     plt.show()

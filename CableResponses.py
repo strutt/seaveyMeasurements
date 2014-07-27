@@ -37,21 +37,18 @@ class CableResponses:
         self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135703_ps_pulser_xpol_fast_5ft_Ch1.csv', padToLength = padLength)
         self.dts['X5'] = dt
 
-
         # Window around pulses to make the frequency domain lovely and smooth.
         # These numbers were picked by looking at the waveforms and should be fine.
         self.pulse5ft = windowPulseAroundPeak(self.pulse5ft,20, 134)
         self.pulseThruCopol5ft = windowPulseAroundPeak(self.pulseThruCopol5ft, 20, 134)
-        self.pulseThruXpol5ft = windowPulse(self.pulseThruXpol5ft, 20, 134)
+        self.pulseThruXpol5ft = windowPulseAroundPeak(self.pulseThruXpol5ft, 20, 134)
         
-        print self.dts['X5']
-
-        # Do the first round of deconvolution
+        # Do the first round of deconvolution, which gets just the cable responses
         self.cableFreqResponseCopol = deconvolveTimeToFreq(self.pulseThruCopol5ft, self.pulse5ft)
-        self.copolFreqs = makeFreqsMHz(dtNs = self.dts['Co5'], N = len(self.cableFreqResponseCopol)
+        self.copolFreqs = makeFreqsMHz(dtNs = self.dts['Co5'], N = len(self.cableFreqResponseCopol))
 
-        self.cableFreqResponseXpol = deconvolveTimeToFreq(self.pulseThruXpol5ft, self.dts['X5'])
-        self.xpolFreqs = makeFreqsMHz(dtNs = self.dts['X5'], N = len(self.pulse5ft))
+        self.cableFreqResponseXpol = deconvolveTimeToFreq(self.pulseThruXpol5ft, self.pulse5ft)
+        self.xpolFreqs = makeFreqsMHz(dtNs = self.dts['X5'], N = len(self.cableFreqResponseXpol))
 
 
         # After getting the freq response of the cables, 
@@ -60,6 +57,8 @@ class CableResponses:
         self.dts['P'] = dt
         self.pulseThruCopol = windowPulseAroundPeak(self.pulseThruCopol, 20, 134)
         self.pulseThruCopolFFT = np.fft.fft(self.pulseThruCopol)
+
+        self.pulseFreqs = deconvolveFreqToFreq(self.pulseThruCopolFFT, self.cableFreqResponseCopol)
 
         print self.dts
         #assert len(set(self.dts)) == 1
@@ -75,9 +74,7 @@ class CableResponses:
 
         fft_wave = np.fft.fft(wave)
         withoutCables = deconvolveFreqToFreq(fft_wave, self.cableFreqResponseCopol)
-        justSeaveys = deconvolveFreqToFreq(self.pulseThruCopolFFT, withoutCables)
-        
-        #return withoutCables 
+        justSeaveys = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
         return justSeaveys
         
 
