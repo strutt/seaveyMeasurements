@@ -34,7 +34,7 @@ def test_CableResponses():
     w2, dt2, t2 = getWaveform(dataDir + '140624_091751_rxp20_vpol_60dBatten_Ch1.csv', padToLength = pl)
     
     w = [i-j for i,j in zip(w, w2)]
-    w = windowPulseAroundPeak(w, 100, 900)
+    w = windowPulseAroundPeak(w, 15, 300)
 
     pure = windowPulseAroundPeak(pure, 5, 134)
 
@@ -47,12 +47,13 @@ def test_CableResponses():
     #print w[0], w2[0]
     freqs, powSpec, phase = getPowerSpectrumInfo(w, dt)
 
+
     plt.plot(times, w)
     plt.plot(times2, pure)
     plt.figure()
 
     N = len(powSpec)
-    powSpec2 = [abs(z**2) for z in w3Pow[:N]]
+    powSpec2 = [abs(z**2) for z in w3Pow]
     #powSpec2[0]/=2
     #powSpec2[-1]/=2
 
@@ -60,11 +61,19 @@ def test_CableResponses():
     powSpec3[0]/=2
     powSpec3[-1]/=2
 
-    #plt.plot(freqs[:N], [10*math.log10(z) if z > 0 else 0 for z in powSpec3], label = 'Pure pulser')
-    #plt.plot(crs.copolFreqs[:N], [10*math.log10(z) for z in powSpec], label = 'With cable')
-    plt.plot(freqs[:N], [10*math.log10(z) for z in powSpec2], label = 'Just seavey to seavey')
+    plt.plot(freqs[:N], [10*math.log10(z) if z > 0 else 0 for z in powSpec3], label = 'Pure pulser')
+    plt.plot(freqs[:N], [10*math.log10(z) for z in powSpec2[:N]], label = 'Just seavey to seavey')
     #plt.plot(crs.copolFreqs[:N], [z for z in powSpec2], label = 'Cable removed')
     plt.legend()
+
+    #print w3Pow
+    gain = crs.doFriisCorrection(relativePowSpec = powSpec2, freqsMHz = freqs, distMeters = 9.8)
+    plt.figure()
+    plt.plot(freqs[:N], [10*math.log10(g) if g > 0 else 0 for g in gain][:N], label = 'Antenna Gain')
+    ax = plt.gca()
+    plt.grid(b=True, which='major', color='r', linestyle='--')
+    plt.xlabel('Frequency (MHz)')
+    plt.ylabel('Gain (dBi)')
     plt.show()
 
 def test_thing():

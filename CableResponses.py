@@ -12,6 +12,17 @@ filterResponse = deconvolveFunction(v_1 = signalAfterFilter, v_2 = signalWithout
 Way 2:
 signalWithoutFilter = deconvolveFunction(v_1 = signalAfterFilter, v_2 = filterResponse)
 
+
+
+Friss equation for antenna transmission:
+
+P1/P2 = G1*G2*(lambda/4*pi*R)**2
+P1/P2 = G1*G2*(c/f*4*pi*R)**2
+
+We were pulsing in thre VPOL so the gains are the same.
+Lambda is the wavelength for which we are doing this calculation = c/f.
+The antenna separation, R,  we actually want is the separation of the phase centers.
+
 """
 
 from S21analysisFunctions import *
@@ -37,8 +48,16 @@ class CableResponses:
         self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135703_ps_pulser_xpol_fast_5ft_Ch1.csv', padToLength = padLength)
         self.dts['X5'] = dt
 
+
+        # Need to account for 20dB attenuator on pulser measurement!
+        self.pulse5ft = removeAttenuationTimeDomain(self.pulse5ft, atten_dB = 20)
+        self.pulseThruCopol5ft = removeAttenuationTimeDomain(self.pulseThruCopol5ft, atten_dB = 20)
+        self.pulseThruXpol5ft = removeAttenuationTimeDomain(self.pulseThruXpol5ft, atten_dB = 20)
+        
+
         # Window around pulses to make the frequency domain lovely and smooth.
-        # These numbers were picked by looking at the waveforms and should be fine.
+        # These numbers were picked by looking at the waveforms and playing until samples contained just the pulse
+        # I think they are fine
         self.pulse5ft = windowPulseAroundPeak(self.pulse5ft,20, 134)
         self.pulseThruCopol5ft = windowPulseAroundPeak(self.pulseThruCopol5ft, 20, 134)
         self.pulseThruXpol5ft = windowPulseAroundPeak(self.pulseThruXpol5ft, 20, 134)
@@ -55,6 +74,8 @@ class CableResponses:
         # waveforms which don't have the additional 5ft of cable.
         self.pulseThruCopol, dt, t4 = getWaveform(baseDir + '140626_140317_ps_pulser_copol_fast_Ch1.csv', padToLength = padLength)
         self.dts['P'] = dt
+
+        self.pulseThruCopol = removeAttenuationTimeDomain(self.pulseThruCopol, atten_dB = 20)
         self.pulseThruCopol = windowPulseAroundPeak(self.pulseThruCopol, 20, 134)
         self.pulseThruCopolFFT = np.fft.fft(self.pulseThruCopol)
 
@@ -77,8 +98,21 @@ class CableResponses:
         justSeaveys = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
         return justSeaveys
         
+    def doFriisCorrection(self, relativePowSpec=None, freqsMHz = None, distMeters = 0):
+        if relativePowSpec == None or freqsMHz == None or distMeters == 0:
+            raise Exception('Need more information!')
 
+        # If this isn't true, someone's done somethings stupid... probably me
+        assert len(relativePowSpec) == len(freqsMHz)
 
+        # Input is P1/P2, we want G2 (assume == G1 for now)
+        c = 3e2 # speed of light in m/us since input freqs are in MHz
+        separationFactors = [(f*4*math.pi*distMeters/c)**2 for f in freqsMHz]
+
+        gain = [math.sqrt(relPowSpec*sepFact) for relPowSpec, sepFact in zip(relativePowSpec, separationFactors)]
+        #gain = [math.sqrt(g) for g in gain]
+        return gain
+        
 
 def deconvolveTimeToFreq(v_1, v_2):
     """
