@@ -30,46 +30,15 @@ def test_CableResponses():
     plt.plot(times2, direct, label = 'w/o cable')
     plt.legend()
 
-    w, dt, t0 = getWaveform(dataDir + '140624_090559_rxp19_vpol_Ch1.csv', padToLength = pl)
-    w2, dt2, t2 = getWaveform(dataDir + '140624_091751_rxp20_vpol_60dBatten_Ch1.csv', padToLength = pl)
+    w, dt, t0 = getWaveform(dataDir + '140624_042916_rxp48_vpol_Ch1.csv', padToLength = pl)
+    w2, dt2, t2 = getWaveform(dataDir + '140624_042726_rxp48_vpol_60dBatten_Ch1.csv', padToLength = pl)
     
     w = [i-j for i,j in zip(w, w2)]
-    w = windowPulseAroundPeak(w, 15, 300)
-
-    pure = windowPulseAroundPeak(pure, 5, 134)
-
-    w3Pow = crs.removeCopol(w, dt)
-    purePow = crs.removeCopol(pure, dt_p)
+    w = windowPulseAroundPeak(w, 10, 300)
+    gain, freqs = crs.removeCablesAndDoFriisCorrection(wave = w, dtNs = dt, distMeters = 9.8)
 
     plt.figure()
-    times = [t0 + i*dt for i in xrange(len(w))]
-    times2 = [t0_p + i*dt_p for i in xrange(len(pure))]
-    #print w[0], w2[0]
-    freqs, powSpec, phase = getPowerSpectrumInfo(w, dt)
-
-
-    plt.plot(times, w)
-    plt.plot(times2, pure)
-    plt.figure()
-
-    N = len(powSpec)
-    powSpec2 = [abs(z**2) for z in w3Pow]
-    #powSpec2[0]/=2
-    #powSpec2[-1]/=2
-
-    powSpec3 = [2*abs(z**2) for z in crs.pulseFreqs[:N]]
-    powSpec3[0]/=2
-    powSpec3[-1]/=2
-
-    plt.plot(freqs[:N], [10*math.log10(z) if z > 0 else 0 for z in powSpec3], label = 'Pure pulser')
-    plt.plot(freqs[:N], [10*math.log10(z) for z in powSpec2[:N]], label = 'Just seavey to seavey')
-    #plt.plot(crs.copolFreqs[:N], [z for z in powSpec2], label = 'Cable removed')
-    plt.legend()
-
-    #print w3Pow
-    gain = crs.doFriisCorrection(relativePowSpec = powSpec2, freqsMHz = freqs, distMeters = 9.8)
-    plt.figure()
-    plt.plot(freqs[:N], [10*math.log10(g) if g > 0 else 0 for g in gain][:N], label = 'Antenna Gain')
+    plt.plot(freqs[:N], [10*math.log10(g) if g > 0 else 0 for g in gain][:N], label = 'Antenna Gain')    
     ax = plt.gca()
     plt.grid(b=True, which='major', color='r', linestyle='--')
     plt.xlabel('Frequency (MHz)')

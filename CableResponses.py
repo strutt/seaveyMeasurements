@@ -42,7 +42,7 @@ class CableResponses:
         # but that was also attached to the cables for this measurement
         self.pulse5ft, dt, t0 = getWaveform(baseDir + '140626_134852_ps_pulser_direct_fast_Ch1.csv', padToLength = padLength)
         self.dts['P5'] = dt
-        print self.dts['P5'] 
+        #print self.dts['P5'] 
         self.pulseThruCopol5ft, dt, t1 = getWaveform(baseDir + '140626_135504_ps_pulser_copol_fast_5ft_Ch1.csv', padToLength = padLength)
         self.dts['Co5'] = dt
         self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135703_ps_pulser_xpol_fast_5ft_Ch1.csv', padToLength = padLength)
@@ -81,24 +81,63 @@ class CableResponses:
 
         self.pulseFreqs = deconvolveFreqToFreq(self.pulseThruCopolFFT, self.cableFreqResponseCopol)
 
-        print self.dts
+        for key, dt in self.dts.items():
+            # Some kind of floating point tolerance
+            assert dt - self.dts['P'] < 0.00000001
+
+        self.dfMHz = 1e3/(len(self.pulse5ft)*self.dts['P5'])
         #assert len(set(self.dts)) == 1
+
+        # Does what is says, we need this to do the Friis correction, since we were pulsing through VPOL with p52
+        self.readInMeanVpolGain()
 
     def removeCopol(self, wave, dtNs):
         # In order to have the same df, we need to have 
         # N_1*dt_1 == N_2*dt_2. If that's not the case, we 
         # need to take action.
-        numZerosToPad = (len(self.pulseThruCopol5ft)*self.dts['Co5'])/dtNs - len(wave)
+
+        numZerosToPad = len(self.pulseThruCopol5ft)*self.dts['Co5']/dtNs - len(wave)
         assert numZerosToPad == int(numZerosToPad)
-        for zeroInd in xrange(int(numZerosToPad)):
-            wave.append(0)
+        #print numZerosToPad, len(self.pulseThruCopol5ft), self.dts['Co5'], dtNs, len(wave)
+        if numZerosToPad >=0:
+            for zeroInd in xrange(int(numZerosToPad)):
+                wave.append(0)
+        else:
+            print 'Warning! Deleting things!'
+            for zeroInd in xrange(int(abs(numZerosToPad))):
+                wave.pop()
+
+        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruCopol5ft)*self.dts['Co5'])
 
         fft_wave = np.fft.fft(wave)
         withoutCables = deconvolveFreqToFreq(fft_wave, self.cableFreqResponseCopol)
-        justSeaveys = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
-        return justSeaveys
+        justSeaveyToSeavey = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
+        return justSeaveyToSeavey
+
+    def removeXpol(self, wave, dtNs):
+        # In order to have the same df, we need to have 
+        # N_1*dt_1 == N_2*dt_2. If that's not the case, we 
+        # need to take action.
+
+        numZerosToPad = len(self.pulseThruXpol5ft)*self.dts['X5']/dtNs - len(wave)
+        assert numZerosToPad == int(numZerosToPad)
+        #print numZerosToPad, len(self.pulseThruCopol5ft), self.dts['Co5'], dtNs, len(wave)
+        if numZerosToPad >=0:
+            for zeroInd in xrange(int(numZerosToPad)):
+                wave.append(0)
+        else:
+            print 'Warning! Deleting things!'
+            for zeroInd in xrange(int(abs(numZerosToPad))):
+                wave.pop()
+
+        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruXpol5ft)*self.dts['X5'])
+
+        fft_wave = np.fft.fft(wave)
+        withoutCables = deconvolveFreqToFreq(fft_wave, self.cableFreqResponseXpol)
+        justSeaveyToSeavey = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
+        return justSeaveyToSeavey
         
-    def doFriisCorrection(self, relativePowSpec=None, freqsMHz = None, distMeters = 0):
+    def doFriisCorrection(self, relativePowSpec=None, freqsMHz = None, distMeters = 0, doSqrt = False):
         if relativePowSpec == None or freqsMHz == None or distMeters == 0:
             raise Exception('Need more information!')
 
@@ -109,10 +148,73 @@ class CableResponses:
         c = 3e2 # speed of light in m/us since input freqs are in MHz
         separationFactors = [(f*4*math.pi*distMeters/c)**2 for f in freqsMHz]
 
-        gain = [math.sqrt(relPowSpec*sepFact) for relPowSpec, sepFact in zip(relativePowSpec, separationFactors)]
+        gain = []
+        if doSqrt == False:
+            gain = [relPowSpec*sepFact/mvr for relPowSpec, sepFact, mvr in zip(relativePowSpec, separationFactors, self.meanVpolResponse)]
+        else:
+            gain = [math.sqrt(relPowSpec*sepFact) for relPowSpec, sepFact in zip(relativePowSpec, separationFactors)]            
         #gain = [math.sqrt(g) for g in gain]
         return gain
+
+    def removeCopolCablesAndDoFriisCorrection(self, wave = None, dtNs = None, distMeters = None, doSqrt = False):
+        """
+        The differing deltaFs after zero padding are starting to confuse me
+        so let's have one function do everything and return a set of freqs as well...
+        """
+        if wave == None or dtNs == None or distMeters == 0:
+            raise Exception('Need more information!')
         
+        justSeaveyToSeavey = self.removeCopol(wave, dtNs)
+        rps = [abs(js2s)**2 for js2s in justSeaveyToSeavey]
+        df = 1e3/(len(self.pulseThruCopol)*self.dts['Co5'])
+        freqs = [df*i for i, r in enumerate(rps)]
+
+        gain = self.doFriisCorrection(relativePowSpec = rps, freqsMHz = freqs, 
+                                      distMeters = distMeters, doSqrt = doSqrt)
+
+        # Everything was padded in this class so the df of the input is the same of the df of the fast measurement
+
+        return gain, freqs
+
+    def removeXpolCablesAndDoFriisCorrection(self, wave = None, dtNs = None, distMeters = None, doSqrt = False):
+        """
+        The differing deltaFs after zero padding are starting to confuse me
+        so let's have one function do everything and return a set of freqs as well...
+        """
+        if wave == None or dtNs == None or distMeters == 0:
+            raise Exception('Need more information!')
+        
+        justSeaveyToSeavey = self.removeXpol(wave, dtNs)
+        rps = [abs(js2s)**2 for js2s in justSeaveyToSeavey]
+        df = 1e3/(len(self.pulseThruCopol)*self.dts['Co5'])
+        freqs = [df*i for i, r in enumerate(rps)]
+
+        gain = self.doFriisCorrection(relativePowSpec = rps, freqsMHz = freqs, distMeters = distMeters, doSqrt = doSqrt)
+
+        # Everything was padded in this class so the df of the input is the same of the df of the fast measurement
+
+        return gain, freqs
+
+
+
+    def readInMeanVpolGain(self):
+        self.meanVpolResponse = []
+        self.vpolReponseFreqsMHz = []
+        inFileName = 'meanVpolResponse.dat'
+        with file(inFileName, 'r') as inFile:
+            for lineInd, line in enumerate(inFile):
+                if lineInd == 0:
+                    continue
+                else:
+                    vals = line.split('\t')
+                    self.meanVpolResponse.append(float(vals[0]))
+                    self.vpolReponseFreqsMHz.append(float(vals[1]))
+
+        if len(self.meanVpolResponse) > 0:
+            print 'Read in mean vpol response!'
+        else:
+            raise Exception("Couldn't find file " + inFileName)
+                    
 
 def deconvolveTimeToFreq(v_1, v_2):
     """
