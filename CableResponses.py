@@ -50,6 +50,7 @@ class CableResponses:
 
 
         # Need to account for 20dB attenuator on pulser measurement!
+
         self.pulse5ft = removeAttenuationTimeDomain(self.pulse5ft, atten_dB = 20)
         self.pulseThruCopol5ft = removeAttenuationTimeDomain(self.pulseThruCopol5ft, atten_dB = 20)
         self.pulseThruXpol5ft = removeAttenuationTimeDomain(self.pulseThruXpol5ft, atten_dB = 20)
@@ -61,19 +62,21 @@ class CableResponses:
         self.pulse5ft = windowPulseAroundPeak(self.pulse5ft,20, 134)
         self.pulseThruCopol5ft = windowPulseAroundPeak(self.pulseThruCopol5ft, 20, 134)
         self.pulseThruXpol5ft = windowPulseAroundPeak(self.pulseThruXpol5ft, 20, 134)
-        
-        # Do the first round of deconvolution, which gets just the cable responses
+
+        # Do the first round of deconvolution, which gets just the cable responses and the
+        # effects of the 10dB coupler on that line.
         self.cableFreqResponseCopol = deconvolveTimeToFreq(self.pulseThruCopol5ft, self.pulse5ft)
         self.copolFreqs = makeFreqsMHz(dtNs = self.dts['Co5'], N = len(self.cableFreqResponseCopol))
 
         self.cableFreqResponseXpol = deconvolveTimeToFreq(self.pulseThruXpol5ft, self.pulse5ft)
         self.xpolFreqs = makeFreqsMHz(dtNs = self.dts['X5'], N = len(self.cableFreqResponseXpol))
 
-
-        # After getting the freq response of the cables, 
-        # waveforms which don't have the additional 5ft of cable.
+        # After getting the freq response of the cables plus 10 dB coupler I need 
+        # the frequency content of the pulse.
+        # To do this, I take the case where the pulse went through the signal chain, WITHOUT
+        # the five feet of cable, and then remove the cable response.
         self.pulseThruCopol, dt, t4 = getWaveform(baseDir + '140626_140317_ps_pulser_copol_fast_Ch1.csv', padToLength = padLength)
-        self.dts['P'] = dt
+        self.dts['Co'] = dt
 
         self.pulseThruCopol = removeAttenuationTimeDomain(self.pulseThruCopol, atten_dB = 20)
         self.pulseThruCopol = windowPulseAroundPeak(self.pulseThruCopol, 20, 134)
@@ -83,7 +86,7 @@ class CableResponses:
 
         for key, dt in self.dts.items():
             # Some kind of floating point tolerance
-            assert dt - self.dts['P'] < 0.00000001
+            assert dt - self.dts['Co'] < 0.00000001
 
         self.dfMHz = 1e3/(len(self.pulse5ft)*self.dts['P5'])
         #assert len(set(self.dts)) == 1
@@ -91,23 +94,49 @@ class CableResponses:
         # Does what is says, we need this to do the Friis correction, since we were pulsing through VPOL with p52
         self.readInMeanVpolGain()
 
+    def removeCopolAndPulse(self, wave, dtNs):
+        # In order to have the same df, we need to have 
+        # N_1*dt_1 == N_2*dt_2. If that's not the case, we 
+        # need to take action.
+
+        numZerosToPad = len(self.pulseThruCopol)*self.dts['Co']/dtNs - len(wave)
+        assert numZerosToPad == int(numZerosToPad) # If it's not an integer, things will be tricky.
+        print numZerosToPad, len(self.pulseThruCopol), self.dts['Co'], dtNs, len(wave)
+        if numZerosToPad >=0:
+            for zeroInd in xrange(int(numZerosToPad)):
+                wave.append(0)
+        else:
+            print 'Warning! Deleting things! You should probably check this is OK!'
+            for zeroInd in xrange(int(abs(numZerosToPad))):
+                wave.pop()
+
+        # So now the frequencies should be the same
+        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruCopol)*self.dts['Co'])
+
+        fft_wave = np.fft.fft(wave)
+        deco = deconvolveFreqToFreq(fft_wave, self.pulseThruCopolFFT)
+        
+        return deco
+
+
     def removeCopol(self, wave, dtNs):
         # In order to have the same df, we need to have 
         # N_1*dt_1 == N_2*dt_2. If that's not the case, we 
         # need to take action.
 
-        numZerosToPad = len(self.pulseThruCopol5ft)*self.dts['Co5']/dtNs - len(wave)
-        assert numZerosToPad == int(numZerosToPad)
-        #print numZerosToPad, len(self.pulseThruCopol5ft), self.dts['Co5'], dtNs, len(wave)
+        numZerosToPad = len(self.pulseThruCopol)*self.dts['Co']/dtNs - len(wave)
+        assert numZerosToPad == int(numZerosToPad) # If it's not an integer, things will be tricky.
+        print numZerosToPad, len(self.pulseThruCopol), self.dts['Co'], dtNs, len(wave)
         if numZerosToPad >=0:
             for zeroInd in xrange(int(numZerosToPad)):
                 wave.append(0)
         else:
-            print 'Warning! Deleting things!'
+            print 'Warning! Deleting things! You should probably check this is OK!'
             for zeroInd in xrange(int(abs(numZerosToPad))):
                 wave.pop()
 
-        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruCopol5ft)*self.dts['Co5'])
+        # So now the frequencies should be the same
+        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruCopol)*self.dts['Co'])
 
         fft_wave = np.fft.fft(wave)
         withoutCables = deconvolveFreqToFreq(fft_wave, self.cableFreqResponseCopol)
@@ -137,8 +166,8 @@ class CableResponses:
         justSeaveyToSeavey = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
         return justSeaveyToSeavey
         
-    def doFriisCorrection(self, relativePowSpec=None, freqsMHz = None, distMeters = 0, doSqrt = False):
-        if relativePowSpec == None or freqsMHz == None or distMeters == 0:
+    def doFriisCorrection(self, relativePowSpec=None, freqsMHz = None, distMeters = -1, doSqrt = False):
+        if relativePowSpec == None or freqsMHz == None or distMeters < 0:
             raise Exception('Need more information!')
 
         # If this isn't true, someone's done somethings stupid... probably me
@@ -156,12 +185,12 @@ class CableResponses:
         #gain = [math.sqrt(g) for g in gain]
         return gain
 
-    def removeCopolCablesAndDoFriisCorrection(self, wave = None, dtNs = None, distMeters = None, doSqrt = False):
+    def removeCopolCablesAndDoFriisCorrection(self, wave = None, dtNs = None, distMeters = -1, doSqrt = False):
         """
         The differing deltaFs after zero padding are starting to confuse me
         so let's have one function do everything and return a set of freqs as well...
         """
-        if wave == None or dtNs == None or distMeters == 0:
+        if wave == None or dtNs == None or distMeters < 0:
             raise Exception('Need more information!')
         
         justSeaveyToSeavey = self.removeCopol(wave, dtNs)
@@ -211,7 +240,7 @@ class CableResponses:
                     self.vpolReponseFreqsMHz.append(float(vals[1]))
 
         if len(self.meanVpolResponse) > 0:
-            print 'Read in mean vpol response!'
+            print 'Read in mean vpol response! ' + str(len(self.meanVpolResponse)) + ' frequencies'
         else:
             raise Exception("Couldn't find file " + inFileName)
                     

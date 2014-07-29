@@ -42,7 +42,7 @@ def main():
     counter = 0
     for antInd, (fV, fH) in enumerate(zip(filesV, filesH)):
         if counter % nAntsPerAxis == 0:
-            fig, axes = plt.subplots(1, 2)
+            fig, axes = plt.subplots(2)
             plt.suptitle('Antenna P' + str(antInd+1) + ' S11')
 
             for ax in axes:
@@ -117,7 +117,7 @@ def main():
                     fileName = 's11p0' + str(antNum)
                 else:
                     fileName = 's11p' + str(antNum)
-                fig.savefig('measurementSummaryDocs/'+fileName+'.png',dpi=600)
+                fig.savefig('measurementSummaryDocs/'+fileName+'.png',dpi=100)
 
 
 
@@ -147,13 +147,7 @@ def main():
     plt.xlabel('Frequency (MHz)')
     plt.ylabel('S11 (dB)')
     if savePlots == True:
-        antNum = antInd + 1
-        fileName = ''
-        if antNum <= 9:
-            fileName = 'rxp0' + str(antNum)
-        else:
-            fileName = 'rxp' + str(antNum)
-        fig.savefig('measurementSummaryDocs/s11' + fileName + '.png',dpi=600)
+        fig.savefig('measurementSummaryDocs/s11VPolSummary.png',dpi=100)
 
 
     plt.figure()
@@ -168,7 +162,7 @@ def main():
     plt.xlabel('Frequency (MHz)')
     plt.ylabel('S11 (dB)')
     if savePlots == True:
-        fig.savefig('measurementSummaryDocs/s11HPolSummary.png',dpi=600)
+        fig.savefig('measurementSummaryDocs/s11HPolSummary.png',dpi=100)
 
     plt.show()
 

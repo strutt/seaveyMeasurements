@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy import fft
@@ -11,7 +12,8 @@ from glob import glob
 
 def main():
     """
-    Takes in csv from TDS6804B and processes waveform
+    First pass at Antenna gain calculation...
+    no deconvolution done...
     """
 
     maxFreqMHz = 2000
@@ -32,7 +34,8 @@ def main():
     listOfFiles.append(glob(dataDir + '*_ps_pulser_xpol*Ch1.csv')[0])
     listOfFiles.append(glob(dataDir + '*_rxp11_hpol_Ch1.csv')[0])
 
-    print listOfFiles
+    for f in listOfFiles:
+        print f
     
     waves = []
     dts = []
@@ -47,7 +50,6 @@ def main():
             w = [w1* 10 for w1 in w] 
         waves.append(w)
         dts.append(dt)
-
 
         # Take the absolute of the subtracted voltage, and find the time of the absolute maximum
         absNewV = [abs(v) for v in waves[-1]]
@@ -110,7 +112,7 @@ def main():
     plt.xlabel('Frequency MHz')
 
     c = 3e8*1e-6 #m/s, *1e-6 so f goes from Hz -> MHz
-    r = 10 #m 33.4ft correct this...
+    r = 8.89 #m 33.4ft correct this...
     gain = [rp*pow((4*math.pi*r*fVal)/c,2) if fVal > 0 else 0 for rp, fVal in zip(relativePower, freqs[0])]
     gain2 = [ math.sqrt(g) if fVal > 50 and fVal < 2000 else 0 for g, fVal in zip(gain, freqs[0])]
     gain2_dB = [10*math.log10(g) if g > 0 else -10 for g in gain2]
@@ -231,7 +233,7 @@ def getPowerSpectralDensity(theFFT, dt):
     """
     powSpec = np.abs(theFFT)**2
     #print powSpec
-    powSpec = powSpec*dt*dt
+    #powSpec = powSpec*dt*dt
     #print powSpec
     #print ''
     return powSpec

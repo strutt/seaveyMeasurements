@@ -22,8 +22,9 @@ def main():
     minFreqMHz = 100
     padToLength = 8192*2
 
-    savePlots = True
+    savePlots = False
     printAverageVpolResponseFile = False #True #False #True #False #True
+    doSqrt = True # For debugging Friis correction
 
     seaveySeparation = 8.89 #9.8 #8.89 #9.8 # meters
 
@@ -150,12 +151,12 @@ def main():
                     antennaGain, f = crs.removeCopolCablesAndDoFriisCorrection(wave = windowedPulse, 
                                                                                dtNs = dts[0], 
                                                                                distMeters = seaveySeparation,
-                                                                               doSqrt = False)
+                                                                               doSqrt = doSqrt)
                 else:
                     antennaGain, f = crs.removeXpolCablesAndDoFriisCorrection(wave = windowedPulse, 
                                                                               dtNs = dts[0], 
                                                                               distMeters = seaveySeparation,
-                                                                              doSqrt = False)
+                                                                              doSqrt = doSqrt)
 
                 
                 #f, antennaGain, phase  = getPowerSpectrumInfo(windowedPulse, dts[0])
@@ -180,7 +181,6 @@ def main():
                     rms_vpol_gain_dB = [r + g**2 for r, g in zip(rms_vpol_gain_dB, antennaGain_dB)]
                     max_vpol_gain_dB = [g if g > maxG else maxG for g, maxG in zip(antennaGain_dB, max_vpol_gain_dB)]
                     min_vpol_gain_dB = [g if g < minG else minG for g, minG in zip(antennaGain_dB, min_vpol_gain_dB)]
-
                 elif pol == 'hpol' and chan == 'Ch1':
                     if antInd == 0:
                         mean_hpol_gain_dB = [0 for g in antennaGain_dB]
@@ -210,7 +210,7 @@ def main():
                 if polInd == 1: # text selection didn't see to work here...
                     myLabel = 'Vpol to Hpol'
                 else:
-                    myabel = 'Hpol to Vpol'
+                    myLabel = 'Hpol to Vpol'
                 axes[chanInd].plot(f[minPlotInd:maxPlotInd], relativeCrossPol[minPlotInd:maxPlotInd], label = myLabel)
 
         for ax in axes:
@@ -218,7 +218,7 @@ def main():
 
 
         if savePlots == True:
-            fig.savefig('measurementSummaryDocs/' + ant + '.png',dpi=600)
+            fig.savefig('measurementSummaryDocs/' + ant + '.png',dpi=100)
     df = crs.dfMHz
 
     n = len(listOfAnts)
@@ -250,7 +250,7 @@ def main():
     plt.xlabel('Frequency (MHz)')
     plt.ylabel('Gain (dBi)')
     if savePlots == True:
-        fig.savefig('measurementSummaryDocs/vpolSummary.png',dpi=600)
+        fig.savefig('measurementSummaryDocs/vpolSummary.png',dpi=100)
 
     fig = plt.figure()
     plt.title('Horizontal Polarization Antenna Gain')
@@ -267,7 +267,7 @@ def main():
     plt.xlabel('Frequency (MHz)')
     plt.ylabel('Gain (dBi)')
     if savePlots == True:
-        fig.savefig('measurementSummaryDocs/hpolSummary.png',dpi=600)
+        fig.savefig('measurementSummaryDocs/hpolSummary.png',dpi=100)
 
 
     if printAverageVpolResponseFile == True:
