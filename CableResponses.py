@@ -36,6 +36,7 @@ class CableResponses:
         self.maxDeconvFreqMHz = maxDeconvFreqMHz
         self.dts = {}
         self.lens = {}
+        self.t0s = {}
 
         # From these waveforms I can get the cable response...
         # Pulser also goes through 5ft of extra cable
@@ -44,13 +45,17 @@ class CableResponses:
         self.pulse5ft, dt, t0 = getWaveform(baseDir + '140626_134852_ps_pulser_direct_fast_Ch1.csv', padToLength = padLength)
         self.dts['P5'] = dt
         self.lens['P5'] = len(self.pulse5ft)
+        self.t0s['P5'] = t0
+
         self.pulseThruCopol5ft, dt, t1 = getWaveform(baseDir + '140626_135504_ps_pulser_copol_fast_5ft_Ch1.csv', padToLength = padLength)
         self.dts['Co5'] = dt
         self.lens['Co5'] = len(self.pulseThruCopol5ft)
         self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135703_ps_pulser_xpol_fast_5ft_Ch1.csv', padToLength = padLength)
         self.dts['X5'] = dt
         self.lens['X5'] = len(self.pulseThruXpol5ft)
+        self.t0s['X5'] = t1
         
+        """
         #self.pulse5ft, dt, t0 = getWaveform(baseDir + '140626_134732_ps_pulser_direct_Ch1.csv', padToLength = padLength)
         #self.dts['P5'] = dt
         #self.lens['P5'] = len(self.pulse5ft)
@@ -60,6 +65,7 @@ class CableResponses:
         #self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135748_ps_pulser_xpol_5ft_Ch1.csv', padToLength = padLength)
         #self.dts['X5'] = dt
         #self.lens['X5'] = len(self.pulseThruXpol5ft)
+        """
 
         # Need to account for 20dB attenuator on pulser measurement!
 
@@ -92,12 +98,21 @@ class CableResponses:
         self.pulseThruCopol, dt, t4 = getWaveform(baseDir + '140626_140317_ps_pulser_copol_fast_Ch1.csv', padToLength = padLength)
         #self.pulseThruCopol, dt, t4 = getWaveform(baseDir + '140626_140219_ps_pulser_copol_Ch1.csv', padToLength = padLength)
         self.dts['Co'] = dt
-
+        self.t0s['Co'] = t4
         self.pulseThruCopol = removeAttenuationTimeDomain(self.pulseThruCopol, atten_dB = 20)
         self.pulseThruCopol = windowPulseAroundPeak(self.pulseThruCopol, 20, 134)
         self.pulseThruCopolFFT = doNormalizedFFT(self.pulseThruCopol, self.dts['Co'])
 
         self.pulseFreqs = deconvolveFreqToFreq(self.pulseThruCopolFFT, self.cableFreqResponseCopol)
+        
+        self.pulseThruXpol, dt, t5 = getWaveform(baseDir + '140626_140010_ps_pulser_xpol_fast_Ch1.csv', padToLength = padLength)
+        
+        self.dts['X'] = dt
+        self.t0s['X'] = t5
+        self.pulseThruXpol = removeAttenuationTimeDomain(self.pulseThruXpol, atten_dB = 20)
+        self.pulseThruXpol = windowPulseAroundPeak(self.pulseThruXpol, 20, 134)
+
+
 
         for key, dt in self.dts.items():
             # Some kind of floating point tolerance
@@ -115,43 +130,25 @@ class CableResponses:
         # Does what is says, we need this to do the Friis correction, since we were pulsing through VPOL with p52
         self.readInMeanVpolGain()
 
-    def removeCopolAndPulse(self, wave, dtNs):
-        # In order to have the same df, we need to have 
-        # N_1*dt_1 == N_2*dt_2. If that's not the case, we 
-        # need to take action.
 
-        numZerosToPad = len(self.pulseThruCopol)*self.dts['Co']/dtNs - len(wave)
-        assert numZerosToPad == int(numZerosToPad) # If it's not an integer, things will be tricky.
-        print numZerosToPad, len(self.pulseThruCopol), self.dts['Co'], dtNs, len(wave)
-        if numZerosToPad >=0:
-            for zeroInd in xrange(int(numZerosToPad)):
-                wave.append(0)
+    def getGroupDelayNs(self, wave, dtNs, t0, pol = 'copol'):
+        maxInd = findPulseMaxInd(wave)
+        t_max = t0 + maxInd*dtNs
+
+        print maxInd, t_max
+        
+        t_max2 = 0
+        if pol == 'copol':
+            maxInd2 = findPulseMaxInd(self.pulseThruCopol)
+            t_max2 = maxInd2*self.dts['Co'] + self.t0s['Co']
+            print maxInd2, t_max2
+        elif pol == 'xpol':
+            maxInd2 = findPulseMaxInd(self.pulseThruXpol)
+            t_max2 = maxInd2*self.dts['X'] + self.t0s['X']
         else:
-            print 'Warning! Deleting things! You should probably check this is OK!'
-            for zeroInd in xrange(int(abs(numZerosToPad))):
-                wave.pop()
+            raise Exception("pol argument must be 'copol' or 'xpol'")
 
-        # So now the frequencies should be the same
-        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruCopol)*self.dts['Co'])
-
-        fft_wave = doNormalizedFFT(wave, dtNs)
-        print fft_wave[100]
-        ps_wave = makePowerSpectrum(fft_wave, dtNs = dtNs)
-        ps_cablePlusPulser = makePowerSpectrum(self.pulseThruCopolFFT, dtNs = self.dts['Co'])
-        print len(ps_wave), len(ps_cablePlusPulser)
-        print ps_wave[100]
-
-        deco = [a/b for a, b, in zip(ps_wave, ps_cablePlusPulser)]
-
-        plt.plot(dBScale(ps_wave))
-        
-        plt.plot(dBScale(ps_cablePlusPulser))
-        plt.show()
-        #deco = ps_wave[:shorterLen]/ps_cablePlusPulser[:shorterLen]
-        #deco = deconvolveFreqToFreq(fft_wave, self.pulseThruCopolFFT)
-        
-        return deco
-
+        return t_max - t_max2
 
     def removeCopol(self, wave, dtNs):
         # In order to have the same df, we need to have 
@@ -160,7 +157,6 @@ class CableResponses:
 
         numZerosToPad = len(self.pulseThruCopol)*self.dts['Co']/dtNs - len(wave)
         assert numZerosToPad == int(numZerosToPad) # If it's not an integer, things will be tricky.
-        print numZerosToPad, len(self.pulseThruCopol), self.dts['Co'], dtNs, len(wave)
         if numZerosToPad >=0:
             for zeroInd in xrange(int(numZerosToPad)):
                 wave.append(0)
@@ -215,7 +211,7 @@ class CableResponses:
         if doSqrt == False:
             gain = [relPowSpec*sepFact/mvr for relPowSpec, sepFact, mvr in zip(relativePowSpec, separationFactors, self.meanVpolResponse)]
         else:
-            gain = [math.sqrt(relPowSpec*sepFact) for relPowSpec, sepFact in zip(relativePowSpec, separationFactors)]            
+            gain = [math.sqrt(relPowSpec*sepFact) for relPowSpec, sepFact in zip(relativePowSpec, separationFactors)]
         #gain = [math.sqrt(g) for g in gain]
         return gain
 
@@ -318,16 +314,16 @@ def doNormalizedInvFFT(fft_norm, df_MHz = 0, dtNs = 0):
     # Is this right!?
     fft_unnorm = []
     if df_MHz > 0:
-        N = len(fft)
-        fft_unnorm = [z*df_MHz*1e-3*fft for z in fft]
+        N = len(fft_norm)
+        fft_unnorm = [z*df_MHz*1e-3 for z in fft_norm]
     elif dtNs > 0:
-        fft_unnorm = [z/dtNs for z in fft]
+        fft_unnorm = [z/dtNs for z in fft_norm]
     else:
         raise Exception('You need to provide dtNs or df_MHz to do fourier stuff!')
 
     v = np.fft.ifft(fft_unnorm)
-    v_r = [x.real for x in v_deco]
-    v_im = [x.imag for x in v_deco]
+    v_r = [x.real for x in v]
+    v_im = [x.imag for x in v]
     if abs(sum(v_im)) > 0.000000001:
         print 'Something dodgy about the fft, imag values remaining after inverse!'
         raise Exception('Inverse FFT not entirely real')
@@ -354,3 +350,8 @@ def makePowerSpectrum(normFFT, dtNs = 0, df_MHz = 0):
 
 def dBScale(powSpec, zeroVal = 0):
     return [10*math.log10(ps) if ps > 0 else zeroVal for ps in powSpec]
+
+
+def getPhaseFromFFT(theFFT):
+    return [math.atan2(z.imag, z.real) for z in theFFT]
+    

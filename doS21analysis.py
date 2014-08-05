@@ -22,15 +22,15 @@ def main():
     minFreqMHz = 100
     padToLength = 8192*2
 
+    speedOfLight = 299792458 # m/s
+
     seaveyNumsVPol = [6.3, 7.7, 9.5, 9.0, 12.5]
     seaveyNumsHPol = [6.0, 8.1, 10.1, 8.0, 12.8]
     seaveyFreqs = [200, 450, 700, 950, 1200]
 
     savePlots = False
-    printAverageVpolResponseFile = False #True #False #True
+    printAverageVpolResponseFile = False
     doSqrt = False # For debugging Friis correction
-
-    seaveySeparation = 8.89 #9.8 #8.89 #9.8 # meters
 
     crs = CR.CableResponses(padToLength, dataDir)
 
@@ -39,8 +39,8 @@ def main():
     prePeakWindow = 1 #10 #3 #10 #ns
     postPeakWindow = pulseWindow - prePeakWindow
     
-    highPass = 100
-    lowPass = 1300
+    highPass = 100 # MHz
+    lowPass = 1300 # MHz
     
     #listOfAnts = ['rxp01', 'rxp02', 'rxp03', 'rxp04', 'rxp05', 'rxp06', 'rxp07', 'rxp08', 'rxp09', 'rxp10', 'rxp11', 'rxp12']
     #listOfAnts = ['rxp13', 'rxp14', 'rxp15', 'rxp16', 'rxp17', 'rxp18', 'rxp19', 'rxp20', 'rxp21', 'rxp22', 'rxp23', 'rxp24']
@@ -50,7 +50,7 @@ def main():
     listOfAnts = ['rxp' + str(antInd+1) if antInd >= 9 else 'rxp0' + str(antInd+1) for antInd in range(51) ]
     listOfChannels = ['Ch1', 'Ch4']
     listOfPols = ['hpol', 'vpol']
-    listOfAnts = ['rxp25']
+    #listOfAnts = ['rxp25']
 
     chanToPol = {'Ch1':'Aligned ', 'Ch4':'Cross-pol '}
 
@@ -74,7 +74,7 @@ def main():
         listOfFiles = glob(globString)
 
         # Now doing on an antenna by antenna basis
-        fig, axes = plt.subplots(2)
+        fig, axes = plt.subplots(3)#2)
         plt.suptitle = 'Antenna ' + str(antInd+1)
 
         axes[0].set_title('Aligned')
@@ -83,12 +83,17 @@ def main():
         axes[1].set_title('Cross Polarization')
         axes[1].grid(b=True, which='major', color='black', linestyle='--')
         plt.ylabel('Relative power (dB)')
+        #plt.xlabel('Frequency (MHz)')
+        axes[2].set_title('Phase')
+        axes[2].grid(b=True, which='major', color='black', linestyle='--')
+        plt.ylabel('Phase (rads)')
         plt.xlabel('Frequency (MHz)')
 
         for polInd, pol in enumerate(listOfPols):
 
             relativeCrossPol = []
             indexOfAbsMax = 0
+            phaseCenterSeparation = -1 # Metres
 
             sampleWindowCopol = {}
 
@@ -133,8 +138,6 @@ def main():
                 windowedPulse = windowPulse(newV, 
                                             startSample = sampleWindowCopol['start'], 
                                             endSample = sampleWindowCopol['end'])
-                                            
-                                                            
 
                 # Limit plots...
                 x0 = sampleWindowCopol['start'] - 100
@@ -147,24 +150,39 @@ def main():
                 axesA[chanInd, polInd].set_ylabel('Amplitude (mV)')
                 axesA[chanInd, polInd].grid(b=True, which='major', color='black', linestyle='--')
 
-
                 #windowedPulseFreqs = crs.removeCopol(windowedPulse, dt)
                 antennaGain = []
                 f = []
+                phase = []
                 if chan == 'Ch1': # Channel 1 on scope was copol
+                    removedCopol = crs.removeCopol(windowedPulse, 
+                                                       dts[0])
+
+                    #print 'complex'
+                    #print removedCopol[100:120]
+                    phase = CR.getPhaseFromFFT(removedCopol)
+
+                    #print 'angle'
+                    #print phase[100:120]
+                    #print ''
+                    #print ''
+                    #print crs.getGroupDelayNs(windowedPulse, dt, t0, pol = 'copol')
+                    dt_ab = crs.getGroupDelayNs(windowedPulse, dt, t0)
+                    phaseCenterSeparation = dt_ab*speedOfLight*1e-9
+                    print 'Separation = ' + str(phaseCenterSeparation) + ' m'
+
                     antennaGain, f = crs.removeCopolCablesAndDoFriisCorrection(wave = windowedPulse, 
                                                                                dtNs = dts[0], 
-                                                                               distMeters = seaveySeparation,
+                                                                               distMeters = phaseCenterSeparation,
                                                                                doSqrt = doSqrt)
                 else:
                     antennaGain, f = crs.removeXpolCablesAndDoFriisCorrection(wave = windowedPulse, 
                                                                               dtNs = dts[0], 
-                                                                              distMeters = seaveySeparation,
+                                                                              distMeters = phaseCenterSeparation,
                                                                               doSqrt = doSqrt)
 
-                
                 #f, antennaGain, phase  = getPowerSpectrumInfo(windowedPulse, dts[0])
-                antennaGain_dB  = [10*math.log10(g) if g > 0 else 0 for g in antennaGain]
+                antennaGain_dB  = CR.dBScale(antennaGain)
 
                 #print windowedPulse
 
@@ -175,6 +193,7 @@ def main():
                 myLabel = pol.capitalize()
                 if chan == 'Ch1': #Ch1 is direct
                     axes[chanInd].plot(f[minPlotInd:maxPlotInd], antennaGain_dB[minPlotInd:maxPlotInd], label = myLabel)
+                    axes[chanInd+2].plot(f[minPlotInd:maxPlotInd], phase[minPlotInd:maxPlotInd], label = 'phase')
                 if pol == 'vpol' and chan == 'Ch1':
                     if antInd == 0:
                         mean_vpol_gain_dB = [0 for g in antennaGain_dB]
