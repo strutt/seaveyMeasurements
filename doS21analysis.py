@@ -22,9 +22,13 @@ def main():
     minFreqMHz = 100
     padToLength = 8192*2
 
+    seaveyNumsVPol = [6.3, 7.7, 9.5, 9.0, 12.5]
+    seaveyNumsHPol = [6.0, 8.1, 10.1, 8.0, 12.8]
+    seaveyFreqs = [200, 450, 700, 950, 1200]
+
     savePlots = False
-    printAverageVpolResponseFile = False #True #False #True #False #True
-    doSqrt = True # For debugging Friis correction
+    printAverageVpolResponseFile = False #True #False #True
+    doSqrt = False # For debugging Friis correction
 
     seaveySeparation = 8.89 #9.8 #8.89 #9.8 # meters
 
@@ -46,7 +50,7 @@ def main():
     listOfAnts = ['rxp' + str(antInd+1) if antInd >= 9 else 'rxp0' + str(antInd+1) for antInd in range(51) ]
     listOfChannels = ['Ch1', 'Ch4']
     listOfPols = ['hpol', 'vpol']
-    #listOfAnts = ['rxp25']
+    listOfAnts = ['rxp25']
 
     chanToPol = {'Ch1':'Aligned ', 'Ch4':'Cross-pol '}
 
@@ -160,7 +164,7 @@ def main():
 
                 
                 #f, antennaGain, phase  = getPowerSpectrumInfo(windowedPulse, dts[0])
-                antennaGain_dB  = [10*math.log10(g) if g > 0 else 0 for g in antennaGain]                
+                antennaGain_dB  = [10*math.log10(g) if g > 0 else 0 for g in antennaGain]
 
                 #print windowedPulse
 
@@ -241,6 +245,7 @@ def main():
     plt.plot(freqs[minPlotInd:maxPlotInd], [m-r for r, m in zip(rms_vpol_gain_dB, mean_vpol_gain_dB)][minPlotInd:maxPlotInd], label = 'Mean - RMS')
     plt.plot(freqs[minPlotInd:maxPlotInd], [m for m in max_vpol_gain_dB[minPlotInd:maxPlotInd]], label = 'Bin-by-bin maximum')
     plt.plot(freqs[minPlotInd:maxPlotInd], [m for m in min_vpol_gain_dB[minPlotInd:maxPlotInd]], label = 'Bin-by-bin minimum')
+    plt.plot(seaveyFreqs, seaveyNumsVPol, 'ro', label='Seavey Measurements')
     #plt.plot(freqs[minPlotInd:maxPlotInd], [10*math.log10(m) if m > 0 else 0 for m in crs.meanVpolResponse[minPlotInd:maxPlotInd]], label = '51 antenna average')
     #plt.xticks(range(0, 2001, 200))
     #plt.yticks(range(-45, 21, 5))
@@ -259,6 +264,8 @@ def main():
     plt.plot(freqs[minPlotInd:maxPlotInd], [m-r for r, m in zip(rms_hpol_gain_dB, mean_hpol_gain_dB)][minPlotInd:maxPlotInd], label = 'Mean - RMS')
     plt.plot(freqs[minPlotInd:maxPlotInd], [m for m in max_hpol_gain_dB[minPlotInd:maxPlotInd]], label = 'Bin-by-bin maximum')
     plt.plot(freqs[minPlotInd:maxPlotInd], [m for m in min_hpol_gain_dB[minPlotInd:maxPlotInd]], label = 'Bin-by-bin minimum')
+    plt.plot(seaveyFreqs, seaveyNumsHPol, 'ro', label='Seavey Measurements')
+
     #plt.xticks(range(0, 2001, 200))
     #plt.yticks(range(-45, 21, 5))
     ax = plt.gca()

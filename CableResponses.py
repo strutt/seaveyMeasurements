@@ -35,40 +35,54 @@ class CableResponses:
     def __init__(self, padLength, baseDir, maxDeconvFreqMHz = 0):
         self.maxDeconvFreqMHz = maxDeconvFreqMHz
         self.dts = {}
-
+        self.lens = {}
 
         # From these waveforms I can get the cable response...
         # Pulser also goes through 5ft of extra cable
         # but that was also attached to the cables for this measurement
+        
         self.pulse5ft, dt, t0 = getWaveform(baseDir + '140626_134852_ps_pulser_direct_fast_Ch1.csv', padToLength = padLength)
         self.dts['P5'] = dt
-        #print self.dts['P5'] 
+        self.lens['P5'] = len(self.pulse5ft)
         self.pulseThruCopol5ft, dt, t1 = getWaveform(baseDir + '140626_135504_ps_pulser_copol_fast_5ft_Ch1.csv', padToLength = padLength)
         self.dts['Co5'] = dt
+        self.lens['Co5'] = len(self.pulseThruCopol5ft)
         self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135703_ps_pulser_xpol_fast_5ft_Ch1.csv', padToLength = padLength)
         self.dts['X5'] = dt
-
+        self.lens['X5'] = len(self.pulseThruXpol5ft)
+        
+        #self.pulse5ft, dt, t0 = getWaveform(baseDir + '140626_134732_ps_pulser_direct_Ch1.csv', padToLength = padLength)
+        #self.dts['P5'] = dt
+        #self.lens['P5'] = len(self.pulse5ft)
+        #self.pulseThruCopol5ft, dt, t1 = getWaveform(baseDir + '140626_135419_ps_pulser_copol_5ft_Ch1.csv', padToLength = padLength)
+        #self.dts['Co5'] = dt
+        #self.lens['Co5'] = len(self.pulseThruCopol5ft)
+        #self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135748_ps_pulser_xpol_5ft_Ch1.csv', padToLength = padLength)
+        #self.dts['X5'] = dt
+        #self.lens['X5'] = len(self.pulseThruXpol5ft)
 
         # Need to account for 20dB attenuator on pulser measurement!
 
         self.pulse5ft = removeAttenuationTimeDomain(self.pulse5ft, atten_dB = 20)
         self.pulseThruCopol5ft = removeAttenuationTimeDomain(self.pulseThruCopol5ft, atten_dB = 20)
         self.pulseThruXpol5ft = removeAttenuationTimeDomain(self.pulseThruXpol5ft, atten_dB = 20)
-        
 
         # Window around pulses to make the frequency domain lovely and smooth.
         # These numbers were picked by looking at the waveforms and playing until samples contained just the pulse
-        # I think they are fine
+        # I think they are fine.
         self.pulse5ft = windowPulseAroundPeak(self.pulse5ft,20, 134)
         self.pulseThruCopol5ft = windowPulseAroundPeak(self.pulseThruCopol5ft, 20, 134)
         self.pulseThruXpol5ft = windowPulseAroundPeak(self.pulseThruXpol5ft, 20, 134)
 
         # Do the first round of deconvolution, which gets just the cable responses and the
         # effects of the 10dB coupler on that line.
-        self.cableFreqResponseCopol = deconvolveTimeToFreq(self.pulseThruCopol5ft, self.pulse5ft)
-        self.copolFreqs = makeFreqsMHz(dtNs = self.dts['Co5'], N = len(self.cableFreqResponseCopol))
+        self.cableFreqResponseCopol = deconvolveTimeToFreq(self.pulseThruCopol5ft, self.dts['Co5'],
+                                                           self.pulse5ft, self.dts['P5'])
+        self.lens['Co'] = len(self.cableFreqResponseCopol)
+        self.copolFreqs = makeFreqsMHz(dtNs = self.dts['Co5'], N = self.lens['Co'])
 
-        self.cableFreqResponseXpol = deconvolveTimeToFreq(self.pulseThruXpol5ft, self.pulse5ft)
+        self.cableFreqResponseXpol = deconvolveTimeToFreq(self.pulseThruXpol5ft, self.dts['X5'],
+                                                          self.pulse5ft, self.dts['P5'])
         self.xpolFreqs = makeFreqsMHz(dtNs = self.dts['X5'], N = len(self.cableFreqResponseXpol))
 
         # After getting the freq response of the cables plus 10 dB coupler I need 
@@ -76,11 +90,12 @@ class CableResponses:
         # To do this, I take the case where the pulse went through the signal chain, WITHOUT
         # the five feet of cable, and then remove the cable response.
         self.pulseThruCopol, dt, t4 = getWaveform(baseDir + '140626_140317_ps_pulser_copol_fast_Ch1.csv', padToLength = padLength)
+        #self.pulseThruCopol, dt, t4 = getWaveform(baseDir + '140626_140219_ps_pulser_copol_Ch1.csv', padToLength = padLength)
         self.dts['Co'] = dt
 
         self.pulseThruCopol = removeAttenuationTimeDomain(self.pulseThruCopol, atten_dB = 20)
         self.pulseThruCopol = windowPulseAroundPeak(self.pulseThruCopol, 20, 134)
-        self.pulseThruCopolFFT = np.fft.fft(self.pulseThruCopol)
+        self.pulseThruCopolFFT = doNormalizedFFT(self.pulseThruCopol, self.dts['Co'])
 
         self.pulseFreqs = deconvolveFreqToFreq(self.pulseThruCopolFFT, self.cableFreqResponseCopol)
 
@@ -88,6 +103,12 @@ class CableResponses:
             # Some kind of floating point tolerance
             assert dt - self.dts['Co'] < 0.00000001
 
+        for key, l in self.lens.items():
+            # Some kind of floating point tolerance
+            assert l - self.lens['Co'] < 0.00000001
+
+        
+        
         self.dfMHz = 1e3/(len(self.pulse5ft)*self.dts['P5'])
         #assert len(set(self.dts)) == 1
 
@@ -113,8 +134,21 @@ class CableResponses:
         # So now the frequencies should be the same
         assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruCopol)*self.dts['Co'])
 
-        fft_wave = np.fft.fft(wave)
-        deco = deconvolveFreqToFreq(fft_wave, self.pulseThruCopolFFT)
+        fft_wave = doNormalizedFFT(wave, dtNs)
+        print fft_wave[100]
+        ps_wave = makePowerSpectrum(fft_wave, dtNs = dtNs)
+        ps_cablePlusPulser = makePowerSpectrum(self.pulseThruCopolFFT, dtNs = self.dts['Co'])
+        print len(ps_wave), len(ps_cablePlusPulser)
+        print ps_wave[100]
+
+        deco = [a/b for a, b, in zip(ps_wave, ps_cablePlusPulser)]
+
+        plt.plot(dBScale(ps_wave))
+        
+        plt.plot(dBScale(ps_cablePlusPulser))
+        plt.show()
+        #deco = ps_wave[:shorterLen]/ps_cablePlusPulser[:shorterLen]
+        #deco = deconvolveFreqToFreq(fft_wave, self.pulseThruCopolFFT)
         
         return deco
 
@@ -138,7 +172,7 @@ class CableResponses:
         # So now the frequencies should be the same
         assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruCopol)*self.dts['Co'])
 
-        fft_wave = np.fft.fft(wave)
+        fft_wave = doNormalizedFFT(wave, dtNs)
         withoutCables = deconvolveFreqToFreq(fft_wave, self.cableFreqResponseCopol)
         justSeaveyToSeavey = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
         return justSeaveyToSeavey
@@ -161,7 +195,7 @@ class CableResponses:
 
         assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruXpol5ft)*self.dts['X5'])
 
-        fft_wave = np.fft.fft(wave)
+        fft_wave = doNormalizedFFT(wave, dtNs)
         withoutCables = deconvolveFreqToFreq(fft_wave, self.cableFreqResponseXpol)
         justSeaveyToSeavey = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
         return justSeaveyToSeavey
@@ -245,12 +279,12 @@ class CableResponses:
             raise Exception("Couldn't find file " + inFileName)
                     
 
-def deconvolveTimeToFreq(v_1, v_2):
+def deconvolveTimeToFreq(v_1, dt_1, v_2, dt_2):
     """
     Do FFT then call main deconvolver
     """
-    fft_1 = np.fft.fft(v_1)
-    fft_2 = np.fft.fft(v_2)
+    fft_1 = doNormalizedFFT(v_1, dt_1) 
+    fft_2 = doNormalizedFFT(v_2, dt_2)
     return deconvolveFreqToFreq(fft_1, fft_2)
 
         
@@ -271,28 +305,52 @@ def deconvolveFreqToTime(fft_1, fft_2):
     fft_d = deconvolveFreqToFreq(fft_1, fft_2)
     return self.doInvFFT(fft_d)
 
-def deconvolveTimeToTime(v_1, v_2):
+def deconvolveTimeToTime(v_1, dt_1, v_2, dt_2):
     """
     Do FFT then pass on to the next guy...
     """
-    fft_1 = np.fft.fft(v_1)
-    fft_2 = np.fft.fft(v_2)
+    fft_1 = doNormalizedFFT(v_1, dt_1)
+    fft_2 = doNormalizedFFT(v_2, dt_2)
     return deconvolveFreqToTime(fft_1, fft_2)
 
+def doNormalizedInvFFT(fft_norm, df_MHz = 0, dtNs = 0):
 
-def doInvFFT(fft):
-    v_deco = np.fft.ifft(fft)
-    v_d = [x.real for x in v_deco]
-    v_d_im = [x.imag for x in v_deco]
-    if abs(sum(v_d_im)) > 0.000000001:
+    # Is this right!?
+    fft_unnorm = []
+    if df_MHz > 0:
+        N = len(fft)
+        fft_unnorm = [z*df_MHz*1e-3*fft for z in fft]
+    elif dtNs > 0:
+        fft_unnorm = [z/dtNs for z in fft]
+    else:
+        raise Exception('You need to provide dtNs or df_MHz to do fourier stuff!')
+
+    v = np.fft.ifft(fft_unnorm)
+    v_r = [x.real for x in v_deco]
+    v_im = [x.imag for x in v_deco]
+    if abs(sum(v_im)) > 0.000000001:
         print 'Something dodgy about the fft, imag values remaining after inverse!'
         raise Exception('Inverse FFT not entirely real')
-                
-    return v_d    
-    
 
-    
+    return v_r
+
+def doNormalizedFFT(wave, dt):
+    fft_unnorm = np.fft.fft(wave)
+    fft_norm = [dt*z for z in fft_unnorm]
+    return fft_norm
 
 
+def makePowerSpectrum(normFFT, dtNs = 0, df_MHz = 0):
+    powSpec = []
+    if df_MHz > 0:
+        powSpec = [(abs(z)**2)*df_MHz*1e3 for z in normFFT]
+    elif dtNs > 0:
+        N = len(normFFT)
+        powSpec = [(abs(z)**2)/(dtNs*N) for z in normFFT]
+    else:
+        raise Exception('You need to provide dtNs or df_MHz to do fourier stuff!')
 
+    return powSpec
 
+def dBScale(powSpec, zeroVal = 0):
+    return [10*math.log10(ps) if ps > 0 else zeroVal for ps in powSpec]

@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 from matplotlib import pyplot as plt
 import math
+import numpy as np
 from glob import glob
 
 """
@@ -37,7 +38,7 @@ def main():
     max_hpol_phase = []
     min_hpol_phase = []
 
-    savePlots = True
+    savePlots = False
 
     counter = 0
     for antInd, (fV, fH) in enumerate(zip(filesV, filesH)):
@@ -51,7 +52,7 @@ def main():
 
         mags, phases, freqs = readS11(fV)
         mags_dB = [10*math.log10(m) for m in mags]
-        phases = [p*180./math.pi for p in phases]
+        #phases = [p*180./math.pi for p in phases]
 
         axes[0].plot(freqs, mags_dB, label='VPol')
         axes[1].plot(freqs, phases, label='VPol')
@@ -77,7 +78,7 @@ def main():
 
         mags, phases, freqs = readS11(fH)
         mags_dB = [10*math.log10(m) for m in mags]
-        phases = [p*180./math.pi for p in phases]
+        #phases = [p*180./math.pi for p in phases]
 
         axes[0].plot(freqs, mags_dB, label='HPol')
         axes[1].plot(freqs, phases, label='HPol')
@@ -108,8 +109,8 @@ def main():
                 ax.set_xlabel('Frequency (MHz)')
                 ax.set_xlim([0, 1500])
             axes[0].set_ylabel('Power (dB)')
-            axes[1].set_ylabel('Phase (Degrees)')
-            axes[1].set_ylim([-180, 180])
+            axes[1].set_ylabel('Group delay (ns)')
+            #axes[1].set_ylim([-180, 180])
             if savePlots == True:
                 antNum = antInd + 1
                 fileName = ''
@@ -200,9 +201,17 @@ def readS11(fileName):
             reals.append(float(vals[1]))
             imags.append(float(vals[2]))
 
+    dw = 2*math.pi*1e6*(freqs[1] - freqs[0])
     mags = [re*re+im*im for re, im in zip(reals, imags)]
-    phases = [math.atan2(im, re) for re, im in zip(reals, imags)]
-    #
+    #phases = [math.asin(im/math.sqrt(mag)) for re, im, mag in zip(reals, imags, mags)]
+    phases = [math.atan2(im, re) for im, re in zip(imags, reals)] #math.sqrt(mag)) for re, im, mag in zip(reals, imags, mags)]
+    phases = np.unwrap(phases)
+    for i, (p, f) in enumerate(zip(phases, freqs)):
+        if i > 0:
+            if p > phases[i-1]:
+                print f
+    #phases = [-p/dw for p in phases]
+
     return mags, phases, freqs
 
 if __name__ == '__main__':

@@ -22,15 +22,15 @@ def test_CableResponses2():
     #pulserToScope, dt_ps, t0_ps = getWaveform(dataDir + '140626_140317_ps_pulser_copol_fast_Ch1.csv')
     pulserToScope, dt_ps, t0_ps = getWaveform(dataDir + '140624_090559_rxp19_vpol_Ch1.csv')
 
-    pulserToScope = windowPulseAroundPeak(pulserToScope, 30, 300)
+    pulserToScope = windowPulseAroundPeak(pulserToScope, 10, 300)
 
     dist = 8.89
     pulseDec = crs.removeCopolAndPulse(pulserToScope, dt_ps)
-    pulseDec = [abs(x)**2 for x in pulseDec]
+    #pulseDec = [abs(x)**2 for x in pulseDec]
     df = 1e3/(len(pulseDec)*dt_ps)
     freqs = [df*i for i in range(len(pulseDec))]
     pulseDec = [x*pow(4*math.pi*dist*f/3e2, 2) for x, f in zip(pulseDec, freqs)]
-    pulseDec = [math.sqrt(x) for x in pulseDec]    
+    pulseDec = [math.sqrt(x) for x in pulseDec]
     pulseDec_dB = [10*math.log10(x) if x > 0 else 0 for x in pulseDec]
 
     plt.plot(freqs, pulseDec_dB, label = 'deconvolved pulser')

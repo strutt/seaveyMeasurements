@@ -65,7 +65,6 @@ def main():
         print 'Differing dts!!! - doing some extra zero padding...'
         lowerDtInd = dts.index(min(dts))
         higherDtInd = dts.index(max(dts))
-        print int(dts.index(min(dts)))
         newLen = int(len(waves[higherDtInd])*dts[higherDtInd]/dts[lowerDtInd])
         print len(waves[lowerDtInd]), newLen
         while len(waves[lowerDtInd]) < newLen:
@@ -105,7 +104,12 @@ def main():
 
     print len(pwrs[0]), len(pwrs[1])
 
-    relativePower = pwrs[1]/(pwrs[0])
+    #relativePower = pwrs[1]/(pwrs[0])
+    relativePower = [a/b for a, b in zip(pwrs[1],pwrs[0])]
+    print pwrs[1]
+    print pwrs[0]
+    print relativePower
+    print relativePower
 
     fig3 = plt.figure()
     plt.plot(freqs[0], relativePower)
