@@ -11,7 +11,14 @@ import CableResponses as CR
 dataDir = 'seaveyDataPalestine2014/S21s/'
 
 
-
+def test_getAllWaveforms():
+    waves, dts, t0s = getAllWaveformsNoiseSubtracted(baseDir = 'seaveyDataPalestine2014/S21s', ant = 1, pol = 'vpol')
+    
+    for key in waves:
+        plt.plot(waves[key])
+        print t0s[key], dts[key]
+        
+    plt.show()
 
 def test_CableResponses2():
 
