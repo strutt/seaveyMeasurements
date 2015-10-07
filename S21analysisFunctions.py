@@ -21,10 +21,9 @@ def getWaveform(fileName, padToLength = 0):
     
     # Read file, skips first 5 lines, which contain header information
     for line in file(fileName):
-        if counter > 5:
-            words = line.split(',')
-            vals.append(1e3*float(words[4])) # 1e3 for V -> mV
-            times.append(1e9*float(words[3]))
+        words = line.split(',')
+        vals.append(1e3*float(words[4])) # 1e3 for V -> mV
+        times.append(1e9*float(words[3]))
         counter += 1
 
     dt = times[1]-times[0]
@@ -79,7 +78,8 @@ def getAllWaveformsNoiseSubtracted(baseDir = 'seaveyDataPalestine2014/S21s/', an
             print 'globString = ' + globString
             print 'Must contain ' + chan + ' and ' + pol
             print fs
-            raise Exception('Too few matching files!')
+            Warning('Too few matching files! Skipping this waveform')
+            continue
 
         # Make times, from 0 increasing in steps of dt
         times = [dts[0]*i for i in range(len(waves[0]))]

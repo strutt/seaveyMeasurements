@@ -38,82 +38,61 @@ class CableResponses:
         self.lens = {}
         self.t0s = {}
 
+        self.waves = {}
+        self.responses = {}
+
+        self.numSamplesBefore = 20
+        self.numSamplesAfter = 114
+
+        # Swap this to toggle between fast and not fast cable responses, I got bored commenting and uncommenting
+        # large swathes of code in here.
+        self.fastFlag = True
+
         # From these waveforms I can get the cable response...
         # Pulser also goes through 5ft of extra cable
         # but that was also attached to the cables for this measurement
-        
-        self.pulse5ft, dt, t0 = getWaveform(baseDir + '140626_134852_ps_pulser_direct_fast_Ch1.csv', padToLength = padLength)
-        self.dts['P5'] = dt
-        self.lens['P5'] = len(self.pulse5ft)
-        self.t0s['P5'] = t0
+        self.fileNames = {}
+        if self.fastFlag is True:
+            self.fileNames['P5'] = baseDir + '140626_134852_ps_pulser_direct_fast_Ch1.csv'
+            self.fileNames['Co5'] = baseDir + '140626_135504_ps_pulser_copol_fast_5ft_Ch1.csv'
+            self.fileNames['X5'] = baseDir + '140626_135703_ps_pulser_xpol_fast_5ft_Ch1.csv'
+            self.fileNames['Co'] = baseDir + '140626_140317_ps_pulser_copol_fast_Ch1.csv'
+            self.fileNames['X'] = baseDir + '140626_140010_ps_pulser_xpol_fast_Ch1.csv'
+        else:
+            self.fileNames['P5'] = baseDir + '140626_134732_ps_pulser_direct_Ch1.csv'
+            self.fileNames['Co5'] = baseDir + '140626_135419_ps_pulser_copol_5ft_Ch1.csv'
+            self.fileNames['X5'] = baseDir + '140626_135748_ps_pulser_xpol_5ft_Ch1.csv'
+            self.fileNames['Co'] = baseDir + '140626_140219_ps_pulser_copol_Ch1.csv'
+            self.fileNames['X'] = baseDir + '140623_053039_ps_pulser_xpol_Ch1.csv'
 
-        self.pulseThruCopol5ft, dt, t1 = getWaveform(baseDir + '140626_135504_ps_pulser_copol_fast_5ft_Ch1.csv', padToLength = padLength)
-        self.dts['Co5'] = dt
-        self.lens['Co5'] = len(self.pulseThruCopol5ft)
-        self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135703_ps_pulser_xpol_fast_5ft_Ch1.csv', padToLength = padLength)
-        self.dts['X5'] = dt
-        self.lens['X5'] = len(self.pulseThruXpol5ft)
-        self.t0s['X5'] = t1
-        
-        """
-        #self.pulse5ft, dt, t0 = getWaveform(baseDir + '140626_134732_ps_pulser_direct_Ch1.csv', padToLength = padLength)
-        #self.dts['P5'] = dt
-        #self.lens['P5'] = len(self.pulse5ft)
-        #self.pulseThruCopol5ft, dt, t1 = getWaveform(baseDir + '140626_135419_ps_pulser_copol_5ft_Ch1.csv', padToLength = padLength)
-        #self.dts['Co5'] = dt
-        #self.lens['Co5'] = len(self.pulseThruCopol5ft)
-        #self.pulseThruXpol5ft, dt, t2 = getWaveform(baseDir + '140626_135748_ps_pulser_xpol_5ft_Ch1.csv', padToLength = padLength)
-        #self.dts['X5'] = dt
-        #self.lens['X5'] = len(self.pulseThruXpol5ft)
-        """
+        for key, fileName in self.fileNames.items():
+            self.waves[key], self.dts[key], self.t0s[key] = getWaveform(fileName, padToLength = padLength)
+            self.lens[key] = len(self.waves[key])
+            print key, fileName
 
-        # Need to account for 20dB attenuator on pulser measurement!
-
-        self.pulse5ft = removeAttenuationTimeDomain(self.pulse5ft, atten_dB = 20)
-        self.pulseThruCopol5ft = removeAttenuationTimeDomain(self.pulseThruCopol5ft, atten_dB = 20)
-        self.pulseThruXpol5ft = removeAttenuationTimeDomain(self.pulseThruXpol5ft, atten_dB = 20)
-
+        # Remove effect of 20dB attenuator, which was added just for these measurements
         # Window around pulses to make the frequency domain lovely and smooth.
         # These numbers were picked by looking at the waveforms and playing until samples contained just the pulse
         # I think they are fine.
-        self.pulse5ft = windowPulseAroundPeak(self.pulse5ft,20, 134)
-        self.pulseThruCopol5ft = windowPulseAroundPeak(self.pulseThruCopol5ft, 20, 134)
-        self.pulseThruXpol5ft = windowPulseAroundPeak(self.pulseThruXpol5ft, 20, 134)
+        for key in self.fileNames:
+            self.waves[key] = removeAttenuationTimeDomain(self.waves[key], atten_dB = 20)
+            #self.waves[key] = windowPulseAroundPeak(self.waves[key], self.numSamplesBefore, self.numSamplesAfter)
 
-        # Do the first round of deconvolution, which gets just the cable responses and the
-        # effects of the 10dB coupler on that line.
-        self.cableFreqResponseCopol = deconvolveTimeToFreq(self.pulseThruCopol5ft, self.dts['Co5'],
-                                                           self.pulse5ft, self.dts['P5'])
-        self.lens['Co'] = len(self.cableFreqResponseCopol)
-        self.copolFreqs = makeFreqsMHz(dtNs = self.dts['Co5'], N = self.lens['Co'])
 
-        self.cableFreqResponseXpol = deconvolveTimeToFreq(self.pulseThruXpol5ft, self.dts['X5'],
-                                                          self.pulse5ft, self.dts['P5'])
-        self.xpolFreqs = makeFreqsMHz(dtNs = self.dts['X5'], N = len(self.cableFreqResponseXpol))
+        # Do the first round of deconvolution, which gets just the cable responses (and the
+        # effects of the 10dB coupler on that line)
+        self.responses['Co'] = deconvolveTimeToFreq(self.waves['Co5'], self.dts['Co5'], 
+                                                    self.waves['P5'], self.dts['P5'])
+        self.responses['X'] = deconvolveTimeToFreq(self.waves['X5'], self.dts['X5'],
+                                                  self.waves['P5'], self.dts['P5'])
 
         # After getting the freq response of the cables plus 10 dB coupler I need 
         # the frequency content of the pulse.
         # To do this, I take the case where the pulse went through the signal chain, WITHOUT
         # the five feet of cable, and then remove the cable response.
-        self.pulseThruCopol, dt, t4 = getWaveform(baseDir + '140626_140317_ps_pulser_copol_fast_Ch1.csv', padToLength = padLength)
-        #self.pulseThruCopol, dt, t4 = getWaveform(baseDir + '140626_140219_ps_pulser_copol_Ch1.csv', padToLength = padLength)
-        self.dts['Co'] = dt
-        self.t0s['Co'] = t4
-        self.pulseThruCopol = removeAttenuationTimeDomain(self.pulseThruCopol, atten_dB = 20)
-        self.pulseThruCopol = windowPulseAroundPeak(self.pulseThruCopol, 20, 134)
-        self.pulseThruCopolFFT = doNormalizedFFT(self.pulseThruCopol, self.dts['Co'])
-
-        self.pulseFreqs = deconvolveFreqToFreq(self.pulseThruCopolFFT, self.cableFreqResponseCopol)
+        self.pulseThruCopolFFT = doNormalizedFFT(self.waves['Co'], self.dts['Co'])
+        self.pulseFreqs = deconvolveFreqToFreq(self.pulseThruCopolFFT, self.responses['Co'])
         
-        self.pulseThruXpol, dt, t5 = getWaveform(baseDir + '140626_140010_ps_pulser_xpol_fast_Ch1.csv', padToLength = padLength)
-        
-        self.dts['X'] = dt
-        self.t0s['X'] = t5
-        self.pulseThruXpol = removeAttenuationTimeDomain(self.pulseThruXpol, atten_dB = 20)
-        self.pulseThruXpol = windowPulseAroundPeak(self.pulseThruXpol, 20, 134)
-
-
-
         for key, dt in self.dts.items():
             # Some kind of floating point tolerance
             assert dt - self.dts['Co'] < 0.00000001
@@ -122,40 +101,62 @@ class CableResponses:
             # Some kind of floating point tolerance
             assert l - self.lens['Co'] < 0.00000001
 
-        
-        
-        self.dfMHz = 1e3/(len(self.pulse5ft)*self.dts['P5'])
-        #assert len(set(self.dts)) == 1
+        self.dfMHz = 1e3/(len(self.waves['P5'])*self.dts['P5'])
 
         # Does what is says, we need this to do the Friis correction, since we were pulsing through VPOL with p52
         self.readInMeanVpolGain()
+
+
+    
+    def getAntToAntDelayLeadingEdge(self, wave, dtNs, t0, pol = 'copol'):
+        i1 = getIndexOfLeadingEdge(wave)
+        i2 = getIndexOfLeadingEdge(self.waves['Co'])
+        t1 = t0 + i1*dtNs
+        t2 = self.t0s['Co'] + i2*self.dts['Co']
+        print t1, t2
+        return t1 - t2
 
 
     def getGroupDelayNs(self, wave, dtNs, t0, pol = 'copol'):
         maxInd = findPulseMaxInd(wave)
         t_max = t0 + maxInd*dtNs
 
-        print maxInd, t_max
-        
         t_max2 = 0
         if pol == 'copol':
-            maxInd2 = findPulseMaxInd(self.pulseThruCopol)
+            maxInd2 = findPulseMaxInd(self.waves['Co'])
             t_max2 = maxInd2*self.dts['Co'] + self.t0s['Co']
-            print maxInd2, t_max2
+            print self.dts['Co'], self.t0s['Co'], maxInd2, t_max2
+            print dtNs, t0, maxInd, t_max
         elif pol == 'xpol':
-            maxInd2 = findPulseMaxInd(self.pulseThruXpol)
+            maxInd2 = findPulseMaxInd(self.waves['X'])
             t_max2 = maxInd2*self.dts['X'] + self.t0s['X']
         else:
             raise Exception("pol argument must be 'copol' or 'xpol'")
 
         return t_max - t_max2
 
-    def removeCopol(self, wave, dtNs):
+    def getGroupDelayNsCrossCorr(self, wave, dtNs, t0, pol = 'copol'):
+
+        mean = sum(wave)/len(wave)
+        v1 = [w - mean for w in wave]
+        v1 /= np.linalg.norm(v1)
+
+        mean = sum(self.waves['Co'])/len(self.waves['Co'])
+        v2 = [w - mean for w in self.waves['Co']]
+        v2 /= np.linalg.norm(v2)
+        
+        #cc = np.correlate(wave, self.waves['Co'], 'full')
+        cc = np.correlate(v1, v2, 'full')
+        #print len(wave), len(self.waves['Co']), len(cc)
+        print dtNs*(np.argmax(cc) - len(wave))
+        return dtNs*(np.argmax(cc) - len(wave))
+
+    def removeResponse(self, wave, dtNs, polKey):
         # In order to have the same df, we need to have 
         # N_1*dt_1 == N_2*dt_2. If that's not the case, we 
         # need to take action.
 
-        numZerosToPad = len(self.pulseThruCopol)*self.dts['Co']/dtNs - len(wave)
+        numZerosToPad = len(self.waves[polKey])*self.dts[polKey]/dtNs - len(wave)
         assert numZerosToPad == int(numZerosToPad) # If it's not an integer, things will be tricky.
         if numZerosToPad >=0:
             for zeroInd in xrange(int(numZerosToPad)):
@@ -166,35 +167,19 @@ class CableResponses:
                 wave.pop()
 
         # So now the frequencies should be the same
-        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruCopol)*self.dts['Co'])
+        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.waves[polKey])*self.dts[polKey])
 
         fft_wave = doNormalizedFFT(wave, dtNs)
-        withoutCables = deconvolveFreqToFreq(fft_wave, self.cableFreqResponseCopol)
+        withoutCables = deconvolveFreqToFreq(fft_wave, self.responses[polKey])
         justSeaveyToSeavey = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
         return justSeaveyToSeavey
+
+
+    def removeCopol(self, wave, dtNs):
+        return self.removeResponse(wave, dtNs, 'Co')
 
     def removeXpol(self, wave, dtNs):
-        # In order to have the same df, we need to have 
-        # N_1*dt_1 == N_2*dt_2. If that's not the case, we 
-        # need to take action.
-
-        numZerosToPad = len(self.pulseThruXpol5ft)*self.dts['X5']/dtNs - len(wave)
-        assert numZerosToPad == int(numZerosToPad)
-        #print numZerosToPad, len(self.pulseThruCopol5ft), self.dts['Co5'], dtNs, len(wave)
-        if numZerosToPad >=0:
-            for zeroInd in xrange(int(numZerosToPad)):
-                wave.append(0)
-        else:
-            print 'Warning! Deleting things!'
-            for zeroInd in xrange(int(abs(numZerosToPad))):
-                wave.pop()
-
-        assert 1e3/(len(wave)*dtNs) == 1e3/(len(self.pulseThruXpol5ft)*self.dts['X5'])
-
-        fft_wave = doNormalizedFFT(wave, dtNs)
-        withoutCables = deconvolveFreqToFreq(fft_wave, self.cableFreqResponseXpol)
-        justSeaveyToSeavey = deconvolveFreqToFreq(withoutCables, self.pulseFreqs)
-        return justSeaveyToSeavey
+        return self.removeResponse(wave, dtNs, 'X')
         
     def doFriisCorrection(self, relativePowSpec=None, freqsMHz = None, distMeters = -1, doSqrt = False):
         if relativePowSpec == None or freqsMHz == None or distMeters < 0:
@@ -225,7 +210,7 @@ class CableResponses:
         
         justSeaveyToSeavey = self.removeCopol(wave, dtNs)
         rps = [abs(js2s)**2 for js2s in justSeaveyToSeavey]
-        df = 1e3/(len(self.pulseThruCopol)*self.dts['Co5'])
+        df = 1e3/(len(self.waves['Co'])*self.dts['Co5'])
         freqs = [df*i for i, r in enumerate(rps)]
 
         gain = self.doFriisCorrection(relativePowSpec = rps, freqsMHz = freqs, 
@@ -245,7 +230,7 @@ class CableResponses:
         
         justSeaveyToSeavey = self.removeXpol(wave, dtNs)
         rps = [abs(js2s)**2 for js2s in justSeaveyToSeavey]
-        df = 1e3/(len(self.pulseThruCopol)*self.dts['Co5'])
+        df = 1e3/(len(self.waves['Co'])*self.dts['Co5'])
         freqs = [df*i for i, r in enumerate(rps)]
 
         gain = self.doFriisCorrection(relativePowSpec = rps, freqsMHz = freqs, distMeters = distMeters, doSqrt = doSqrt)
@@ -355,3 +340,14 @@ def dBScale(powSpec, zeroVal = 0):
 def getPhaseFromFFT(theFFT):
     return [math.atan2(z.imag, z.real) for z in theFFT]
     
+def getIndexOfLeadingEdge(wave):
+    n = len(wave)
+    mean = sum(wave)/n
+    rms = math.sqrt(sum([v**2 for v in wave])/n - mean*mean)
+            
+    for i, v in enumerate(wave):
+        if abs(v) > mean + 5*rms:
+            return i
+
+    return None
+
