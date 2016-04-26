@@ -24,13 +24,14 @@ def main():
 
     speedOfLight = 299792458 # m/s
 
+    # Numbers from the manufacturer indicating their gain estimate vs. frequency.
+    # Plotted over the top of our measurements
     seaveyNumsVPol = [6.3, 7.7, 9.5, 9.0, 12.5]
     seaveyNumsHPol = [6.0, 8.1, 10.1, 8.0, 12.8]
     seaveyFreqs = [200, 450, 700, 950, 1200]
 
-    savePlots = True
-    printAverageVpolResponseFile = True
-    printAverageHpolResponseFile = True    
+    savePlots = False #True
+    printAverageVpolResponseFile = False
     doSqrt = True #False # For debugging Friis correction
 
     crs = CR.CableResponses(padToLength, dataDir)
@@ -67,25 +68,25 @@ def main():
     min_hpol_gain_dB = []
 
     for antInd, ant in enumerate(listOfAnts):
-        #if antInd > 0:
-        #    continue
+        if antInd > 0:
+            continue
         #print 'Doing analysis for antenna ' + str(ant)
 
         # Now doing on an antenna by antenna basis
-        #fig, axes = plt.subplots(3)#2)
-        #plt.suptitle = 'Antenna ' + str(antInd+1)
-        #
-        #axes[0].set_title('Aligned')
-        #axes[0].grid(b=True, which='major', color='black', linestyle='--')
-        #plt.ylabel('Gain (dBi)')
-        #axes[1].set_title('Cross Polarization')
-        #axes[1].grid(b=True, which='major', color='black', linestyle='--')
-        #plt.ylabel('Relative power (dB)')
-        ##plt.xlabel('Frequency (MHz)')
-        #axes[2].set_title('Phase')
-        #axes[2].grid(b=True, which='major', color='black', linestyle='--')
-        #plt.ylabel('Phase (rads)')
+        fig, axes = plt.subplots(3)#2)
+        plt.suptitle = 'Antenna ' + str(antInd+1)
+
+        axes[0].set_title('Aligned')
+        axes[0].grid(b=True, which='major', color='black', linestyle='--')
+        plt.ylabel('Gain (dBi)')
+        axes[1].set_title('Cross Polarization')
+        axes[1].grid(b=True, which='major', color='black', linestyle='--')
+        plt.ylabel('Relative power (dB)')
         #plt.xlabel('Frequency (MHz)')
+        axes[2].set_title('Phase')
+        axes[2].grid(b=True, which='major', color='black', linestyle='--')
+        plt.ylabel('Phase (rads)')
+        plt.xlabel('Frequency (MHz)')
 
         for polInd, pol in enumerate(listOfPols):
 
@@ -141,33 +142,29 @@ def main():
                     print crs.dts
                     print ''
 
-                    #plt.figure()
-                    ##plt.plot([crs.t0s['Co'] + crs.dts['Co']*i for i, v in enumerate(newV)], [v*1e4 for v in newV])
-                    #plt.plot([t0 + dt*i for i, v in enumerate(windowedPulse)], [v*1e2 for v in windowedPulse], label = 'windowed pulse')
-                    ##plt.plot([t0 + dt*i for i, v in enumerate(newV)], newV)
-                    #plt.plot([crs.t0s['Co'] + crs.dts['Co']*i for i, v in enumerate(crs.waves['Co'])], crs.waves['Co'], label='Copol')
-                    #plt.plot([crs.t0s['Co5'] + crs.dts['Co5']*i for i, v in enumerate(crs.waves['Co5'])], crs.waves['Co5'], label = 'Copol+5ft')
+                    plt.figure()
+                    #plt.plot([crs.t0s['Co'] + crs.dts['Co']*i for i, v in enumerate(newV)], [v*1e4 for v in newV])
+                    plt.plot([t0 + dt*i for i, v in enumerate(windowedPulse)], [v*1e2 for v in windowedPulse], label = 'windowed pulse')
+                    #plt.plot([t0 + dt*i for i, v in enumerate(newV)], newV)
+                    plt.plot([crs.t0s['Co'] + crs.dts['Co']*i for i, v in enumerate(crs.waves['Co'])], crs.waves['Co'], label='Copol')
+                    plt.plot([crs.t0s['Co5'] + crs.dts['Co5']*i for i, v in enumerate(crs.waves['Co5'])], crs.waves['Co5'], label = 'Copol+5ft')
 
                     
                     pulseTime = CR.doNormalizedInvFFT(crs.pulseFreqs, dtNs = 0.05) # 20Gsa
-                    #plt.plot([crs.t0s['Co5'] + crs.dts['Co5']*i for i, v in enumerate(pulseTime)], pulseTime, label = 'Pure pulse')
-                    #plt.plot([crs.t0s['P5'] + crs.dts['P5']*i for i, v in enumerate(crs.waves['P5'])], crs.waves['P5'], label = 'Pulse + 5ft')
+                    plt.plot([crs.t0s['Co5'] + crs.dts['Co5']*i for i, v in enumerate(pulseTime)], pulseTime, label = 'Pure pulse')
+                    plt.plot([crs.t0s['P5'] + crs.dts['P5']*i for i, v in enumerate(crs.waves['P5'])], crs.waves['P5'], label = 'Pulse + 5ft')
                     
                     #plt.plot([crs.t0s['P5'] + crs.dts['P5']*i for i, v in enumerate(crs.pulse5ft)], crs.pulse5ft)
 
                     #plt.plot([t0s['Ch2'] + dts['Ch2']*i for i, v in enumerate(waves['Ch2'])], waves['Ch2'])
 
                     phase = CR.getPhaseFromFFT(removedCopol)
-                    #dt_ab = crs.getAntToAntDelayLeadingEdge(windowedPulse, dt, t0)
-                    
-                    #plt.legend()
-                    #phaseCenterSeparation = dt_ab*speedOfLight*1e-9 
-                    faceSeparation = 8.89 # apparently
-                    phaseCenterToFace = 0.20
-                    phaseCenterSeparation = faceSeparation + 2*phaseCenterToFace
+                    dt_ab = crs.getAntToAntDelayLeadingEdge(windowedPulse, dt, t0)
+
+                    plt.legend()
+                    phaseCenterSeparation = dt_ab*speedOfLight*1e-9
                     print 'Separation = ' + str(phaseCenterSeparation) + ' m'
-                    #print 'Phase centre distance behind face ' + str((phaseCenterSeparation - faceSeparation)/2)
-                    print 'Phase centre distance behind face ' + str((phaseCenterSeparation - faceSeparation)/2)
+                    print 'Phase centre distance behind face ' + str((phaseCenterSeparation - 8.89)/2)
 
                     antennaGain, f = crs.removeCopolCablesAndDoFriisCorrection(wave = windowedPulse,
                                                                                dtNs = dts[chan],
@@ -232,8 +229,8 @@ def main():
                     myLabel = 'Hpol to Vpol'
                 #axes[chanInd].plot(f[minPlotInd:maxPlotInd], relativeCrossPol[minPlotInd:maxPlotInd], label = myLabel)
 
-        #for ax in axes:
-        #    ax.legend(loc='lower right', fancybox=True)
+        for ax in axes:
+            ax.legend(loc='lower right', fancybox=True)
 
 
         #if savePlots == True:
@@ -293,18 +290,11 @@ def main():
 
 
     if printAverageVpolResponseFile == True:
-        with file('meanVPolResponse.dat', 'w') as outFile:
-            outFile.write('vPolSeaveyGain_dBi\tFreqsMHz\n')
-            for g, f in zip(mean_vpol_gain_dB[minPlotInd:maxPlotInd], freqs[minPlotInd:maxPlotInd]):
-                outFile.write(str(g) + '\t' + str(f) + '\n')
+        with file('meanVpolResponse.dat', 'w') as outFile:
+            outFile.write('meanVpolReponse\tFreqsMHz\n')
+            for i, g in enumerate(mean_vpol_gain_dB):
+                outFile.write(str(pow(10, g/10)) + '\t' + str(df*i) + '\n')
 
-    if printAverageHpolResponseFile == True:
-        with file('meanHPolResponse.dat', 'w') as outFile:
-            outFile.write('hPolSeaveyGain_dBi\tFreqsMHz\n')
-            for g, f in zip(mean_hpol_gain_dB[minPlotInd:maxPlotInd], freqs[minPlotInd:maxPlotInd]):
-                outFile.write(str(g) + '\t' + str(f) + '\n')
-
-                
 
     plt.show()
 
