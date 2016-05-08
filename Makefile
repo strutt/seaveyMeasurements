@@ -79,7 +79,7 @@ ROOT_LIBRARY = libSeaveyTools.${DLLSUF}
 DICT = seaveyToolsDict
 LIB_OBJS = $(DICT).o SeaveyDataHandler.o
 CLASS_HEADERS = SeaveyDataHandler.h
-BINARIES = createTGraphsFromCsvFiles findOffAxisDelay
+BINARIES = createTGraphsFromCsvFiles findOffAxisDelay makeAntennaInformationPlots
 
 #Now the bits we're actually compiling
 all: $(ROOT_LIBRARY) $(BINARIES) 

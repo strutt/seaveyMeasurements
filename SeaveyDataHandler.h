@@ -27,6 +27,7 @@ class SeaveyDataHandler{
   
 public:
   SeaveyDataHandler();
+  SeaveyDataHandler(int padLength);  
   ~SeaveyDataHandler();
   
   static TGraph* getGraphFromCsvFile(const TString& fileName);
@@ -42,10 +43,38 @@ public:
   
   Bool_t kPrintWarnings;
   Bool_t kSubtractNoiseHistogram;
+
+  void removeAttenuationTimeDomain(TGraph* gr, Double_t attendB);
+  FFTWComplex* removeCopolResponse(TGraph* gr);
+  FFTWComplex* doNormalizedFFT(Int_t n, Double_t* y);
+
+
+  TGraph* grPsPulserDirectFast;
+  TGraph* grPsPulserCopolFast5ft;
+  TGraph* grPsPulserXpolFast5ft;
+  TGraph* grPsPulserCopolFast;
+  TGraph* grPsPulserXpolFast;
+  
+  FFTWComplex* fftwComplexPsPulserDirectFast;
+  FFTWComplex* fftwComplexPsPulserCopolFast5ft;
+  FFTWComplex* fftwComplexPsPulserXpolFast5ft;
+  FFTWComplex* fftwComplexPsPulserCopolFast;
+  FFTWComplex* fftwComplexPsPulserXpolFast;
+  FFTWComplex* fftwComplexCopolCableResponse;
+  FFTWComplex* fftwComplexXpolCableResponse;
+  FFTWComplex* fftwComplexPulseFreqs;
+  
+  Double_t deltaF;
+  Int_t numFreqs;
+  
+  Int_t nPointsCables;
+  Double_t dtCables;
   
 private:
   TFile* kFile;
 
+  void zeroPointers();
+  void makeCableResponses(int padLength);
 };
 
 #endif
