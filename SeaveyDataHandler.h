@@ -47,7 +47,7 @@ public:
   void removeAttenuationTimeDomain(TGraph* gr, Double_t attendB);
   FFTWComplex* removeCopolResponse(TGraph* gr);
   FFTWComplex* doNormalizedFFT(Int_t n, Double_t* y);
-
+  FFTWComplex* doNormalizedFFT(TGraph* gr);  
 
   TGraph* grPsPulserDirectFast;
   TGraph* grPsPulserCopolFast5ft;

@@ -27,10 +27,13 @@ def main():
     seaveyNumsVPol = [6.3, 7.7, 9.5, 9.0, 12.5]
     seaveyNumsHPol = [6.0, 8.1, 10.1, 8.0, 12.8]
     seaveyFreqs = [200, 450, 700, 950, 1200]
-
-    savePlots = True
-    printAverageVpolResponseFile = True
-    printAverageHpolResponseFile = True    
+    
+    #savePlots = True
+    #printAverageVpolResponseFile = True
+    #printAverageHpolResponseFile = True
+    savePlots = False
+    printAverageVpolResponseFile = False
+    printAverageHpolResponseFile = False
     doSqrt = True #False # For debugging Friis correction
 
     crs = CR.CableResponses(padToLength, dataDir)
@@ -67,8 +70,8 @@ def main():
     min_hpol_gain_dB = []
 
     for antInd, ant in enumerate(listOfAnts):
-        #if antInd > 0:
-        #    continue
+        if antInd > 0:
+            continue
         #print 'Doing analysis for antenna ' + str(ant)
 
         # Now doing on an antenna by antenna basis

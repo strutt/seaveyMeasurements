@@ -103,6 +103,11 @@ class CableResponses:
 
         self.dfMHz = 1e3/(len(self.waves['P5'])*self.dts['P5'])
 
+        for i, j in enumerate(self.pulseFreqs):
+            f = i*self.dfMHz
+            if f >= 200 and f < 1200:
+                print 'y  ', f, j
+
         # Does what is says, we need this to do the Friis correction, since we were pulsing through VPOL with p52
         self.readInMeanVpolGain()
 
@@ -213,6 +218,11 @@ class CableResponses:
         df = 1e3/(len(self.waves['Co'])*self.dts['Co5'])
         freqs = [df*i for i, r in enumerate(rps)]
 
+        """
+        for f, r in zip(freqs, rps):
+            if f > 200 and f < 1300:
+                print f, r
+        """
         gain = self.doFriisCorrection(relativePowSpec = rps, freqsMHz = freqs, 
                                       distMeters = distMeters, doSqrt = doSqrt)
 
