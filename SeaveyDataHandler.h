@@ -29,7 +29,10 @@ public:
   SeaveyDataHandler();
   SeaveyDataHandler(int padLength);  
   ~SeaveyDataHandler();
-  
+
+
+  static FFTWComplex* doNormalizedFFT(TGraph* gr);
+  static TGraph* doNormalizedInvFFT(int n, FFTWComplex* fft, double deltaF);
   static TGraph* getGraphFromCsvFile(const TString& fileName);
   
   TGraph* getBoresightGraphFromTFile(Int_t antNumber, Int_t channel, AnitaPol::AnitaPol_t pol);
@@ -47,7 +50,7 @@ public:
   void removeAttenuationTimeDomain(TGraph* gr, Double_t attendB);
   FFTWComplex* removeCopolResponse(TGraph* gr);
   FFTWComplex* doNormalizedFFT(Int_t n, Double_t* y);
-  FFTWComplex* doNormalizedFFT(TGraph* gr);  
+  
 
   TGraph* grPsPulserDirectFast;
   TGraph* grPsPulserCopolFast5ft;
@@ -63,6 +66,7 @@ public:
   FFTWComplex* fftwComplexCopolCableResponse;
   FFTWComplex* fftwComplexXpolCableResponse;
   FFTWComplex* fftwComplexPulseFreqs;
+
   
   Double_t deltaF;
   Int_t numFreqs;

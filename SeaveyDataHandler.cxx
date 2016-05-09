@@ -181,6 +181,22 @@ FFTWComplex* SeaveyDataHandler::doNormalizedFFT(Int_t n, Double_t* y){
 
 
 
+TGraph* SeaveyDataHandler::doNormalizedInvFFT(int n, FFTWComplex* fft, double deltaF){
+
+  double* invFFT = FFTtools::doInvFFT(n, fft);
+
+  TGraph* gr = new TGraph();
+  gr->Set(n);
+  for(int i=0; i < n; i++){
+    gr->SetPoint(i, deltaF*i, invFFT[i]*deltaF);
+  }  
+  
+  delete [] invFFT;
+  return gr;
+
+}
+
+
 void SeaveyDataHandler::makeCableResponses(int padLength){
 
   grPsPulserDirectFast = (TGraph*) kFile->Get("gr_ps_pulser_direct_fast_Ch1"); // this is pulser + 5ft

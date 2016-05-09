@@ -19,8 +19,10 @@ const Int_t antNums[numAnts] = {30, 29, 26, 25};
 
 // speed of light
 const Double_t c = 299792458;
-const Double_t separationMeters = 8.89; //m
+const Double_t faceToFaceSeparationMeters = 8.89; //m
 const Double_t faceToPhaseCenter = 0.2; // 20cm
+const double phaseCenterToPhaseCenterSeparationMeters = faceToFaceSeparationMeters + 2*faceToPhaseCenter;
+// const Double_t phaseCenterToPhaseCenterTime = phaseCenterToPhaseCenterSeparationMeters/c;
 
 
 std::vector<Double_t> friisCorrection(const std::vector<Double_t>& ps, const std::vector<Double_t>& freqs);
@@ -98,116 +100,6 @@ int main(){
     pulserPowerNoCables.push_back(power);
     freqs.push_back(freqInd*sData.deltaF);
   }
-
-  
-  for(int polInd = 0; polInd < AnitaPol::kNotAPol; polInd++){
-
-    AnitaPol::AnitaPol_t pol = AnitaPol::AnitaPol_t(polInd);
-    
-    for(int antInd=0; antInd < numAnts; antInd++){
-      if(antInd > 0) {
-	continue;
-      }
-      Int_t antNum = antNums[antInd];
-      
-      TGraph* gr0 = sData.getBoresightGraphFromTFile(antNum, channel, pol);
-
-      // const Double_t dt = gr0->GetX()[1] - gr0->GetX()[0];
-      // const Double_t dtInterp = 0.1*dt;
-
-      // gr0->SetTitle("Before");
-      // gr0->SetName("grBefore");
-      // gr0->Write();
-      sData.doNoiseSubtraction(gr0, antNum, channel, pol);
-
-      // gr0->SetTitle("Noise subbed");
-      // gr0->SetName("grNoiseSubbed");
-      // gr0->Write();
-      sData.windowPulse(gr0, timeBefore, timeAfter);
-      // gr0->SetTitle("Final");
-      // gr0->SetName("grFinal");
-
-      TString gr0Name = TString::Format("gr%d_%d_%d_%d", antNum, 0, 0, polInd);
-      gr0->SetName(gr0Name);
-      gr0->Write();
-
-      TGraph* gr0ps = FFTtools::makePowerSpectrum(gr0);      
-      gr0ps->SetName(gr0Name + "ps");
-      convertXaxisFromHzToMHz(gr0ps);      
-      gr0ps->Write();
-      delete gr0ps;
-      
-      std::cout << gr0->GetN() << std::endl;
-      double dt = gr0->GetX()[1] - gr0->GetX()[0];
-      
-      FFTWComplex* seaveyToSeavey = sData.removeCopolResponse(gr0);
-      std::cout << gr0->GetN() << std::endl;
-
-      std::vector<Double_t> ps;
-      std::vector<Double_t> phaseResponse;
-      std::vector<Double_t> groupDelay;
-      std::vector<Double_t> theseFreqs;
-
-      for(int freqInd=0; freqInd < sData.numFreqs; freqInd++){
-	Double_t f = freqInd*sData.deltaF;
-	if(f >= minFreq && f < maxFreq){
-	  Double_t power = seaveyToSeavey[freqInd].getAbsSq();
-	  power /= dt;
-
-	  ps.push_back(power);	  
-	  theseFreqs.push_back(f);
-
-	  phaseResponse.push_back(seaveyToSeavey[freqInd].getPhase());
-	}
-      }
-      
-      std::vector<Double_t> gain = friisCorrection(ps, theseFreqs);
-      
-      dBConversion(gain);
-      dBConversion(ps);
-      
-      TGraph* gr0Gain = new TGraph(gain.size(), &theseFreqs[0], &gain[0]);
-      gr0Gain->SetName(gr0Name + "Gain");
-      convertXaxisFromHzToMHz(gr0Gain);
-      gr0Gain->Write();
-      delete gr0Gain;
-
-      TGraph* gr0Phase = new TGraph(phaseResponse.size(), &theseFreqs[0], &phaseResponse[0]);
-      gr0Phase->SetName(gr0Name + "Phase");
-
-      TGraph* gr0Group = (TGraph*) gr0Phase->Clone(gr0Name + "Group");
-      
-      for(int i=0; i < gr0Group->GetN()-1; i++){
-	Double_t y0 = gr0Group->GetY()[i];
-	Double_t y1 = gr0Group->GetY()[i+1];	
-	while(y1 < y0){
-	  y1 += TMath::TwoPi();
-	}
-	Double_t dy = y1 - y0;
-	Double_t dx = gr0Group->GetX()[i+1] - gr0Group->GetX()[i];
-	gr0Group->GetY()[i] = dy/dx;
-	// gr0Group->GetY()[i] -= (separationMeters + 2*faceToPhaseCenter)/c;
-      }
-      gr0Group->RemovePoint(gr0Group->GetN()-1);
-
-      convertXaxisFromHzToMHz(gr0Phase);
-      convertXaxisFromHzToMHz(gr0Group);
-      gr0Phase->Write();      
-      gr0Group->Write();
-      delete gr0Group;
-      delete gr0Phase;
-      
-
-      TGraph* gr0DecoPs = new TGraph(ps.size(), &theseFreqs[0], &ps[0]);
-      gr0DecoPs->SetName(gr0Name + "DecoPs");
-      convertXaxisFromHzToMHz(gr0DecoPs);
-      gr0DecoPs->Write();
-      delete gr0DecoPs;
-      
-      delete [] seaveyToSeavey;      
-    }
-  }
-
   TGraph* grPulseFreqs = new TGraph(sData.numFreqs, &freqs[0], &pulserPowerNoCables[0]);
   grPulseFreqs->SetName("grPulseFreqsPs");
   grPulseFreqs->Write();
@@ -220,6 +112,281 @@ int main(){
   TGraph* grCopolFreqs = new TGraph(sData.numFreqs, &freqs[0], &copolPower[0]);
   grCopolFreqs->SetName("grCopolFreqsPs");
   grCopolFreqs->Write();
+
+  // for(int polInd = 0; polInd < AnitaPol::kNotAPol; polInd++){
+  for(int polInd = AnitaPol::kVertical; polInd >= AnitaPol::kHorizontal; polInd--){    
+
+    AnitaPol::AnitaPol_t pol = AnitaPol::AnitaPol_t(polInd);
+    
+    for(int antInd=0; antInd < numAnts; antInd++){
+      if(antInd > 0) {
+	continue;
+      }
+      Int_t antNum = antNums[antInd];
+      
+      TGraph* gr0 = sData.getBoresightGraphFromTFile(antNum, channel, pol);
+      sData.doNoiseSubtraction(gr0, antNum, channel, pol);
+      sData.windowPulse(gr0, timeBefore, timeAfter);
+
+      TString gr0Name = TString::Format("gr%d_%d_%d_%d", antNum, 0, 0, polInd);
+      gr0->SetName(gr0Name);
+      gr0->Write();
+
+      // TGraph* gr0ps = FFTtools::makePowerSpectrum(gr0);
+      // gr0ps->SetName(gr0Name + "ps");
+      // gr0ps->Write();
+
+      // FFTWComplex* rawFFT = sData.doNormalizedFFT(gr0);
+      // TGraph* grRawPhase = new TGraph();
+      // for(int samp=0; samp < gr0ps->GetN(); samp++){
+      // 	grRawPhase->SetPoint(grRawPhase->GetN(), gr0ps->GetX()[samp], rawFFT[samp].getPhase());
+      // }
+      // grRawPhase->SetName(gr0Name + "RawPhase");
+      // grRawPhase->Write();
+
+      // TGraph* grRawGroup = (TGraph*) grRawPhase->Clone(gr0Name + "RawGroup");
+      // double dxRaw = TMath::TwoPi()*(grRawGroup->GetX()[1]-grRawGroup->GetX()[0]);
+      // for(int i=0; i < grRawGroup->GetN()-1; i++){
+      // 	double y1 = grRawPhase->GetY()[i+1];
+      // 	double y0 = grRawPhase->GetY()[i];
+      // 	if(y1 > y0){
+      // 	  y1 -= TMath::TwoPi();
+      // 	}
+      // 	double dy = y1 - y0;
+      // 	grRawGroup->GetY()[i] = -dy/dxRaw;
+      // 	grRawGroup->GetY()[i] *= 1e9;
+      // }
+      // grRawGroup->Write();
+
+      // std::cerr << "gr0Dt = " << gr0->GetX()[1] - gr0->GetX()[0] << std::endl;
+      // std::cerr << "gr0N = " << gr0->GetN() << std::endl;
+      // std::cerr << "dfRaw = " << gr0ps->GetX()[1] - gr0ps->GetX()[0] << std::endl;
+
+      // convertXaxisFromHzToMHz(gr0ps);
+      
+      // delete gr0ps;
+      // delete grRawPhase;
+      // delete grRawGroup;
+      // delete [] rawFFT;
+      
+      // std::cout << gr0->GetN() << std::endl;
+      double dt = gr0->GetX()[1] - gr0->GetX()[0];
+      
+      FFTWComplex* seaveyToSeavey = sData.removeCopolResponse(gr0);
+      std::cout << gr0->GetN() << std::endl;
+
+      std::vector<Double_t> ps;
+      std::vector<Double_t> phaseResponse;
+      std::vector<Double_t> theseFreqs;
+
+      FFTWComplex* impulseRespFreq = new FFTWComplex[sData.numFreqs];
+      
+      for(int freqInd=0; freqInd < sData.numFreqs; freqInd++){
+	Double_t f = freqInd*sData.deltaF;
+	if(f >= minFreq && f < maxFreq){
+	  Double_t power = seaveyToSeavey[freqInd].getAbsSq();
+	  power /= dt;
+
+	  ps.push_back(power);
+	  theseFreqs.push_back(f);
+
+	  Double_t phase = seaveyToSeavey[freqInd].getPhase();
+	  if(phase < -TMath::Pi()){
+	    phase += TMath::TwoPi();
+	  }
+	  else if(phase >= TMath::Pi()){
+	    phase -= TMath::TwoPi();
+	  }
+
+	  double mag = seaveyToSeavey[freqInd].getAbs();
+	  // impulseRespFreq[freqInd].setMagPhase(mag, 0);
+	  impulseRespFreq[freqInd].setMagPhase(mag, phase/2);
+	  phaseResponse.push_back(phase);
+	}
+	else{
+	  impulseRespFreq[freqInd].re = 0;
+	  impulseRespFreq[freqInd].im = 0;
+	}
+      }
+      
+      // std::vector<Double_t> gain = ps;
+      // double minGainInBand = 1e9;
+      // double maxGainInBand = -1e9;
+      // for(UInt_t i=0; i < gain.size(); i++){
+      // 	gain.at(i)/=2; // half
+      // }
+      // dBConversion(gain);
+      // for(UInt_t i=0; i < gain.size(); i++){
+      // 	if(theseFreqs.at(i) > 200e6 && theseFreqs.at(i) < 1200e6){
+      // 	  if(gain.at(i) < minGainInBand){
+      // 	    minGainInBand = gain.at(i);
+      // 	  }
+      // 	  if(gain.at(i) > maxGainInBand){
+      // 	    maxGainInBand = gain.at(i);
+      // 	  }
+      // 	}
+      // }
+      // for(UInt_t i=0; i < gain.size(); i++){
+      // 	gain.at(i) -= maxGainInBand;
+      // 	std::cerr << theseFreqs[i]/1e6 << "\t" << gain.at(i) << std::endl;
+      // }
+      // minGainInBand -= maxGainInBand;
+
+      // Double_t lowEdge = -1000;
+      // Double_t highEdge = 1e15;
+      // for(UInt_t i=0; i < gain.size(); i++){
+      // 	if(gain.at(i) < minGainInBand - 3 && theseFreqs.at(i) < 200e6 && theseFreqs.at(i) >= lowEdge){
+      // 	  lowEdge = theseFreqs.at(i);
+      // 	}
+      // }
+      // for(UInt_t i=gain.size()-1; i != 0; i--){
+      // 	std::cerr << theseFreqs.at(i)/1e6 << "\t" << gain.at(i) << "\t" << minGainInBand << std::endl;
+      //   if(gain.at(i) < minGainInBand - 3 && theseFreqs.at(i) > 1200e6){
+      // 	  highEdge = theseFreqs.at(i);
+      // 	}
+      // 	  if(theseFreqs.at(i) < 1200e6){
+      // 	    break;
+      // 	  }
+      // }
+      
+      // // std::cerr << doneHighEdge << "\t" << minGainInBand - maxGainInBand << std::endl;
+      // std::cerr << "the band = " << lowEdge/1e6 << " - " << highEdge/1e6 << "MHz" << std::endl;
+      
+      // TGraph* gr0Gain = new TGraph(gain.size(), &theseFreqs[0], &gain[0]);
+      // gr0Gain->SetName(gr0Name + "Gain");
+      // convertXaxisFromHzToMHz(gr0Gain);
+      // gr0Gain->Write();
+      // delete gr0Gain;
+      
+      std::vector<Double_t> gain_dBi = friisCorrection(ps, theseFreqs);
+      
+      dBConversion(gain_dBi);
+      dBConversion(ps);
+      
+      // TGraph* grSeaveyToSeavey = sData.doNormalizedInvFFT(gr0->GetN(), seaveyToSeavey, sData.deltaF);
+      // grSeaveyToSeavey->SetName(gr0Name+ "SeaveyToSeavey");
+      // grSeaveyToSeavey->Write();
+      // delete grSeaveyToSeavey;
+      
+      TGraph* gr0GaindBi = new TGraph(gain_dBi.size(), &theseFreqs[0], &gain_dBi[0]);
+      gr0GaindBi->SetName(gr0Name + "GaindBi");
+      convertXaxisFromHzToMHz(gr0GaindBi);
+      gr0GaindBi->Write();
+      delete gr0GaindBi;
+
+      TGraph* gr0Phase = new TGraph(phaseResponse.size(), &theseFreqs[0], &phaseResponse[0]);
+      gr0Phase->SetName(gr0Name + "Phase");
+
+      // TGraph* gr0PhaseUnwrapped = (TGraph*) gr0Phase->Clone(gr0Name + "PhaseUnwrapped");
+
+      // if(gr0PhaseUnwrapped->GetN() > 1){
+      // 	for(int i=0; i < gr0PhaseUnwrapped->GetN()-1; i++){
+      // 	  Double_t y0 = gr0PhaseUnwrapped->GetY()[i];
+      // 	  Double_t y1 = gr0PhaseUnwrapped->GetY()[i+1];
+
+      // 	  if(y1 - y0 > TMath::Pi()){
+      // 	    y1 -= TMath::TwoPi();
+      // 	  }
+      // 	  else if(y1 - y0 < -TMath::Pi()){
+      // 	    y1 += TMath::TwoPi();	  
+      // 	  }	  
+      // 	}
+      // }
+
+      // deltaF is about 1.2MHz
+      // this means that deltaOmega = 7.7 MRads per second
+      // if the phase didn't change at all, the group delay would be zero
+      // if it changes by 1 radian then dPhi/dOmega = 1.30380e-07
+      // if it changes by pi then the group delay is dPhi/dOmega = 8.19200e-07
+      // you can make the group delay larger by having abs(dPhi) > TwoPi.
+      // but you can't make it smaller unless the phase variation is TINY...
+      // does the interpolation do something strage here?
+
+      
+      TGraph* gr0Group = (TGraph*) gr0Phase->Clone(gr0Name + "Group");
+
+      Double_t dx = TMath::TwoPi()*(theseFreqs[1]-theseFreqs[0]);
+      for(int i=0; i < gr0Group->GetN()-1; i++){
+	Double_t y0 = gr0Phase->GetY()[i];
+	Double_t y1 = gr0Phase->GetY()[i+1];
+	
+	if(y1 - y0 > TMath::Pi()){
+	  y1 -= TMath::TwoPi();
+	}
+	else if(y1 - y0 <= -TMath::Pi()){
+	  y1 += TMath::TwoPi();	  
+	}
+	Double_t dy = -(y1 - y0);
+	gr0Group->GetY()[i] = dy/dx;
+      }
+      gr0Group->RemovePoint(gr0Group->GetN()-1);
+
+      // now divide by two to account for the fact that you've gone through two antennas...      
+      for(int i=0; i < gr0Group->GetN()-1; i++){
+	gr0Group->GetY()[i]/=2;
+      }
+      
+      // and finally, I think this is how this should work.
+      // I go through my assumed group delay to generate a new set of phases...
+      // is this just the same as dividing the magnitude by two? Not sure at this point...
+      // grGroup was generated doing [i+1] - [i], so if you have [i], you get [i+1].
+      // assume an initial phase of pi...
+
+
+      double f0 = gr0Group->GetX()[0];
+      int freqInd0 = TMath::Nint(f0/sData.deltaF);
+      impulseRespFreq[freqInd0].setMagPhase(impulseRespFreq[freqInd0].getAbs(), TMath::Pi()/2);
+					    
+      for(int i=0; i < gr0Group->GetN(); i++){
+	Int_t freqInd = freqInd0 + i;	
+	double thisPhase = impulseRespFreq[freqInd].getPhase();
+
+	double minusDyByDx = gr0Group->GetY()[i];
+	double thisDx = sData.deltaF*TMath::TwoPi();
+	double deltaPhase = -1*minusDyByDx*thisDx;
+	double nextPhase = thisPhase + deltaPhase;
+
+	// impulseRespFreq[freqInd+1].setMagPhase(impulseRespFreq[freqInd+1].getAbs(), nextPhase);
+	impulseRespFreq[freqInd+1].setMagPhase(impulseRespFreq[freqInd+1].getAbs(), nextPhase);	
+      }
+      
+
+      TGraph* grAssumedImpulseResponse = sData.doNormalizedInvFFT(sData.nPointsCables,
+								  impulseRespFreq,
+								  sData.deltaF);
+      grAssumedImpulseResponse->SetName(gr0Name + "ImpulseResponse");
+      grAssumedImpulseResponse->Write();
+      delete grAssumedImpulseResponse;
+      delete [] impulseRespFreq;
+	    
+      
+      // convertXaxisFromHzToMHz(gr0Phase);
+      convertXaxisFromHzToMHz(gr0Group);
+      // gr0Phase->Write();      
+
+      // convert from s to ns
+      for(int i=0; i < gr0Group->GetN(); i++){
+	gr0Group->GetY()[i] *= 1e9; 
+      }
+      gr0Group->Write();      
+      delete gr0Group;
+      // delete gr0Phase;
+
+
+
+      // TGraph* gr0DecoPs = new TGraph(ps.size(), &theseFreqs[0], &ps[0]);
+      // gr0DecoPs->SetName(gr0Name + "DecoPs");
+      // convertXaxisFromHzToMHz(gr0DecoPs);
+      // gr0DecoPs->Write();
+      // delete gr0DecoPs;
+      
+      delete [] seaveyToSeavey;
+      delete gr0;
+    }
+
+    
+  }
+
   
   fOut->Write();
   fOut->Close();
@@ -229,9 +396,9 @@ int main(){
 
 std::vector<Double_t> friisCorrection(const std::vector<Double_t>& ps, const std::vector<Double_t>& freqs){
 
-  const double partFactor = 4*TMath::Pi()*(separationMeters + 2*faceToPhaseCenter)/c;
+  const double partFactor = 4*TMath::Pi()*(phaseCenterToPhaseCenterSeparationMeters)/c;
 
-  std::vector<Double_t> gain(ps.size(), 0);
+  std::vector<Double_t> gain_dBi(ps.size(), 0);
   
   // separationFactors = [(f*4*math.pi*distMeters/c)**2 for f in freqsMHz]
  
@@ -241,12 +408,11 @@ std::vector<Double_t> friisCorrection(const std::vector<Double_t>& ps, const std
     Double_t friisFactor = (f*f*partFactor*partFactor);
     
     // ps[i] *= friisFactor
-    gain.at(i) = TMath::Sqrt(ps[i]*friisFactor);
+    gain_dBi.at(i) = TMath::Sqrt(ps[i]*friisFactor);
   }
-  return gain;
+  return gain_dBi;
 }
 
-// void makeMoreSightGainVsFrequencyPlots(const SeaveyDataHandler* sDataPtr){
 
 
 
