@@ -409,6 +409,10 @@ FFTWComplex* SeaveyDataHandler::removeCopolResponse(TGraph* gr){
 TGraph* SeaveyDataHandler::getGraphFromCsvFile(const TString& fileName){
 
   std::ifstream inFile(fileName.Data());
+  if(!inFile.is_open()){
+    return NULL;
+  }
+  
   const Int_t numLinesInHeader = 6;
   const Int_t maxLineSize = 1024;
   
@@ -446,21 +450,26 @@ TGraph* SeaveyDataHandler::getGraphFromCsvFile(const TString& fileName){
 TGraph* SeaveyDataHandler::getBoresightGraphFromTFile(Int_t antNumber, Int_t channel, AnitaPol::AnitaPol_t pol){
 
   TString polStr = pol == AnitaPol::kHorizontal ? "hpol" : "vpol";
-  
-  TString grName = TString::Format("gr_rxp%d_%s_Ch%d",
-				   antNumber,
-				   polStr.Data(),
-				   channel);
 
+  TString grName;
+  if(antNumber < 10){
+    grName = TString::Format("gr_rxp0%d_%s_Ch%d",
+			     antNumber,
+			     polStr.Data(),
+			     channel);  
+  }
+  else{
+    grName = TString::Format("gr_rxp%d_%s_Ch%d",
+			     antNumber,
+			     polStr.Data(),
+			     channel);  
+  }
+  
   TGraph* gr = (TGraph*) kFile->Get(grName);
 
   if(gr){
     TString title = TString::Format("RXP %d %s ch. %d", antNumber, polStr.Data(), channel);
     gr->SetTitle(title);
-
-    // for(int i=0; i < gr->GetN(); i++){
-    //   gr->GetY()[i] *= 1e3;
-    // }
   }
   else{
     if(kPrintWarnings){    
@@ -476,13 +485,24 @@ TGraph* SeaveyDataHandler::getAttenuatedGraphFromTFile(Int_t antNumber, Int_t ch
 
   TString polStr = pol == AnitaPol::kHorizontal ? "hpol" : "vpol";
   
-  TString grName = TString::Format("gr_rxp%d_%s_60dBatten_Ch%d",
-				   antNumber,
-				   polStr.Data(),
-				   channel);
+  TString grName;
 
+  if(antNumber < 10){
+    grName = TString::Format("gr_rxp0%d_%s_60dBatten_Ch%d",
+			     antNumber,
+			     polStr.Data(),
+			     channel);
+  }
+  else{
+    
+    grName = TString::Format("gr_rxp%d_%s_60dBatten_Ch%d",
+			     antNumber,
+			     polStr.Data(),
+			     channel);      
+
+  }
   TGraph* gr = (TGraph*) kFile->Get(grName);
-
+  
   if(gr){
     TString title = TString::Format("60db Attenuated RXP %d %s ch. %d", antNumber, polStr.Data(), channel);
     gr->SetTitle(title);  

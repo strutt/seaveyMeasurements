@@ -6,8 +6,8 @@
 
 
 // Silly globals...
-const Int_t numAnts = 4;
-const Int_t antNums[numAnts] = {30, 29, 26, 25};
+// const Int_t numAnts = 4;
+// const Int_t antNums[numAnts] = {30, 29, 26, 25};
 
 // const Int_t azRange = 45;
 // const Int_t deltaAz = 15;
@@ -43,6 +43,7 @@ inline void convertXaxisFromHzToMHz(TGraph* gr){
 int main(){
 
   SeaveyDataHandler sData(8192*2);
+  sData.kPrintWarnings = 1;
 
   // Channel 1 is aligned, channel 4 is cross-pol
   Int_t channel = 1;
@@ -89,9 +90,13 @@ int main(){
   //      divide out the cable response
   //      divide out the pulse frequencies
 
-  const Double_t minFreq = 70e6;
-  const Double_t maxFreq = 1425e6;
-
+  // const Double_t minFreq = 70e6;
+  const Double_t minFreq = 160e6;  
+  // const Double_t maxFreq = 1425e6;
+  const Double_t maxFreq = 1570e6;
+  // const Double_t maxFreq = 1570e6;    
+  const double maxFreqs[AnitaPol::kNotAPol] = {1570e6, 1430e6};
+  
   std::vector<double> pulserPowerNoCables;
   std::vector<double> freqs;  
   for(int freqInd=0; freqInd < sData.numFreqs; freqInd++){
@@ -114,17 +119,26 @@ int main(){
   grCopolFreqs->Write();
 
   // for(int polInd = 0; polInd < AnitaPol::kNotAPol; polInd++){
-  for(int polInd = AnitaPol::kVertical; polInd >= AnitaPol::kHorizontal; polInd--){    
+  for(int polInd = AnitaPol::kVertical; polInd >= AnitaPol::kHorizontal; polInd--){
 
     AnitaPol::AnitaPol_t pol = AnitaPol::AnitaPol_t(polInd);
     
-    for(int antInd=0; antInd < numAnts; antInd++){
-      if(antInd > 0) {
+    // for(int antInd=0; antInd < numAnts; antInd++){
+    // for(int ant=0; ant < 52; ant++){
+    // for(int antInd=0; antInd < 5; antInd++){
+    for(int antInd=0; antInd < 51; antInd++){
+      // for(int antInd=0; antInd < numAnts; antInd++){
+      //   if(antInd > 0) {
+      // 	continue;
+      //   }
+      // Int_t antNum = antNums[antInd];
+      int antNum = antInd + 1;
+
+      TGraph* gr0 = sData.getBoresightGraphFromTFile(antNum, channel, pol);
+      std::cerr << gr0 << "\t" << antNum << std::endl;
+      if(gr0==NULL){
 	continue;
       }
-      Int_t antNum = antNums[antInd];
-      
-      TGraph* gr0 = sData.getBoresightGraphFromTFile(antNum, channel, pol);
       sData.doNoiseSubtraction(gr0, antNum, channel, pol);
       sData.windowPulse(gr0, timeBefore, timeAfter);
 
@@ -301,7 +315,6 @@ int main(){
       // you can make the group delay larger by having abs(dPhi) > TwoPi.
       // but you can't make it smaller unless the phase variation is TINY...
       // does the interpolation do something strage here?
-
       
       TGraph* gr0Group = (TGraph*) gr0Phase->Clone(gr0Name + "Group");
 
