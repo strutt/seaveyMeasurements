@@ -22,6 +22,7 @@
 
 #include "AnitaConventions.h"
 #include "FFTtools.h"
+#include "RootTools.h"
 
 class SeaveyDataHandler{
   
@@ -66,7 +67,6 @@ public:
   FFTWComplex* fftwComplexCopolCableResponse;
   FFTWComplex* fftwComplexXpolCableResponse;
   FFTWComplex* fftwComplexPulseFreqs;
-
   
   Double_t deltaF;
   Int_t numFreqs;

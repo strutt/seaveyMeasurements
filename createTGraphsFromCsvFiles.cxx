@@ -29,6 +29,7 @@ int main(){
     gr->SetName(grName);
     gr->Write();
 
+    delete gr;
     numFiles++;    
   }
 

@@ -517,8 +517,9 @@ TGraph* SeaveyDataHandler::getAttenuatedGraphFromTFile(Int_t antNumber, Int_t ch
 }
 
 
-TGraph* SeaveyDataHandler::getOffAxisGraphFromTFile(Int_t antNumber, Int_t channel, AnitaPol::AnitaPol_t pol,
-						  Int_t az, Int_t el){
+TGraph* SeaveyDataHandler::getOffAxisGraphFromTFile(Int_t antNumber, Int_t channel,
+						    AnitaPol::AnitaPol_t pol,
+						    Int_t az, Int_t el){
 
   if(az==0 && el==0){
     return getBoresightGraphFromTFile(antNumber, channel, pol);
@@ -640,8 +641,18 @@ void SeaveyDataHandler::doNoiseSubtraction(TGraph* gr, Int_t antNumber, Int_t ch
 void SeaveyDataHandler::windowPulse(TGraph* gr, Double_t timeBeforePeak, Double_t timeAfterPeak){
     
   // Let's assume everything is well behaved for now...
-  Int_t peakSamp = FFTtools::getPeakBin(gr);
-  Double_t peakTime = gr->GetX()[peakSamp];
+
+  Double_t maxY;
+  Double_t maxX;
+  Double_t minY;
+  Double_t minX;
+
+  Double_t lowerLimit = 0.155e-6;
+  Double_t upperLimit = 0.195e-6;  
+  RootTools::getMaxMinWithinLimits(gr, maxY, maxX, minY, minX, lowerLimit, upperLimit);
+
+  // Double_t peakTime = maxX;
+  Double_t peakTime = minX;  
   
   for(int samp=0; samp < gr->GetN(); samp++){
 
