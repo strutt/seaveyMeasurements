@@ -117,7 +117,8 @@ void SeaveyDataHandler::removeAttenuationTimeDomain(TGraph* gr, Double_t attendB
 
   // 20dB in power is 10dB in voltage...
   Double_t attenVolts = attendB/2;
-  Double_t factor = pow(10, attenVolts/2);
+  // Double_t factor = pow(10, attenVolts/2);
+  Double_t factor = pow(10, attenVolts/10);
   
   for(int samp=0; samp < gr->GetN(); samp++){
     gr->GetY()[samp] *= factor;
@@ -140,6 +141,9 @@ FFTWComplex* SeaveyDataHandler::doNormalizedFFT(TGraph* gr){
   FFTWComplex* theFFT = FFTtools::doFFT(gr->GetN(), gr->GetY());
   double dt = gr->GetX()[1] - gr->GetX()[0];
   Int_t nf = (gr->GetN()/2)+1;
+
+  // std::cerr << theFFT[1].re << "\t" << theFFT[1].im << ":\t\t";
+  
   for(int freqInd=0; freqInd < nf; freqInd++){
     double phase = theFFT[freqInd].getPhase();
     double mag = theFFT[freqInd].getAbs();
@@ -153,6 +157,8 @@ FFTWComplex* SeaveyDataHandler::doNormalizedFFT(TGraph* gr){
     //   std::cerr << "freqInd " << freqInd << ", phase, mag, newMag = " << phase << ", " << mag << ", " << newMag << std::endl;
     // }
   }
+  // std::cerr << theFFT[1].re << "\t" << theFFT[1].im << std::endl;
+  
   return theFFT;
 }
 
@@ -171,7 +177,7 @@ FFTWComplex* SeaveyDataHandler::doNormalizedFFT(Int_t n, Double_t* y){
   Int_t nf = (n/2)+1;
   for(int freqInd=0; freqInd < nf; freqInd++){
     double phase = theFFT[freqInd].getPhase();
-    double mag = TMath::Sqrt(theFFT[freqInd].getAbs());
+    double mag = theFFT[freqInd].getAbs();
     // double newMag = mag/n;
     double newMag = mag;
     theFFT[freqInd].setMagPhase(newMag, phase);
@@ -239,13 +245,14 @@ void SeaveyDataHandler::makeCableResponses(int padLength){
   }
   
   // When we took these data we added 20dB of attenuation to the ps pulser.
-  // Here we remove that attenuation  
+  // Here we remove that attenuation
 
   nPointsCables = theGrs[0]->GetN();
   deltaF = 1./(dtCables*nPointsCables);
   numFreqs = (nPointsCables/2) + 1;
   
   for(int i=0; i < numCalibGraphs; i++){
+    // removeAttenuationTimeDomain(theGrs[i], 20);
     removeAttenuationTimeDomain(theGrs[i], 20);
 
     Double_t thisDt = theGrs[i]->GetX()[1] - theGrs[i]->GetX()[0];
@@ -268,6 +275,17 @@ void SeaveyDataHandler::makeCableResponses(int padLength){
   for(int freqInd = 0; freqInd < numFreqs; freqInd++){
     fftwComplexCopolCableResponse[freqInd] = fftwComplexPsPulserCopolFast5ft[freqInd]/fftwComplexPsPulserDirectFast[freqInd];
   }
+
+
+  std::cerr << fftwComplexPsPulserCopolFast5ft[1].re << "\t"
+	    << fftwComplexPsPulserCopolFast5ft[1].im << ":\t\t";
+
+  std::cerr << fftwComplexCopolCableResponse[1].re << "\t"
+	    << fftwComplexCopolCableResponse[1].im << ":\t\t";
+
+  std::cerr << fftwComplexPsPulserDirectFast[1].re << "\t"
+	    << fftwComplexPsPulserDirectFast[1].im << std::endl;
+  
   // fftwComplexCopolCableResponse = new FFTWComplex[numFreqs];
   // for(int freqInd = 0; freqInd < numFreqs; freqInd++){
   //   fftwComplexCopolCableResponse[freqInd] = fftwComplexPsPulserCopolFast5ft[freqInd]/fftwComplexPsPulserDirectFast[freqInd];
@@ -293,6 +311,8 @@ void SeaveyDataHandler::makeCableResponses(int padLength){
     //   std::cerr << freqInd << "\t" << fftwComplexCopolCableResponse[freqInd].re << "\t" << fftwComplexCopolCableResponse[freqInd].im << std::endl;
     // }
   }
+
+  // std::cerr << deltaF << "\t" << dtCables << std::endl;
 }
 
 
@@ -333,8 +353,8 @@ FFTWComplex* SeaveyDataHandler::removeCopolResponse(TGraph* gr){
 
   const int numFreqPad = (gr->GetN()/2) + 1;
   FFTWComplex* fftGr = doNormalizedFFT(gr);    
-  FFTWComplex* deconvolved = new FFTWComplex[numFreqs];
 
+  FFTWComplex* deconvolved = new FFTWComplex[numFreqs];
   for(int freqInd=0; freqInd < numFreqs; freqInd++){
     if(freqInd < numFreqPad){    
       deconvolved[freqInd] = fftGr[freqInd];
@@ -350,7 +370,7 @@ FFTWComplex* SeaveyDataHandler::removeCopolResponse(TGraph* gr){
     // Double_t re = deconvolved[freqInd].re;
     // Double_t im = deconvolved[freqInd].im;
     if(fftwComplexCopolCableResponse[freqInd].getAbsSq()){
-      deconvolved[freqInd]/=fftwComplexCopolCableResponse[freqInd];
+      deconvolved[freqInd]/=fftwComplexCopolCableResponse[freqInd];      
     }
     else{
       deconvolved[freqInd].re = 0;
@@ -661,3 +681,5 @@ void SeaveyDataHandler::windowPulse(TGraph* gr, Double_t timeBeforePeak, Double_
     }
   }
 }
+
+

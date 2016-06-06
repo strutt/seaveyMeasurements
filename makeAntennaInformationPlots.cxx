@@ -25,6 +25,8 @@ const Double_t faceToPhaseCenter = 0.2; // 20cm
 const double phaseCenterToPhaseCenterSeparationMeters = faceToFaceSeparationMeters + 2*faceToPhaseCenter;
 // const Double_t phaseCenterToPhaseCenterTime = phaseCenterToPhaseCenterSeparationMeters/c;
 
+const double partFactor = 4*TMath::Pi()*(phaseCenterToPhaseCenterSeparationMeters)/c;
+
 
 std::vector<Double_t> friisCorrection(const std::vector<Double_t>& ps,
 				      const std::vector<Double_t>& freqs,
@@ -33,11 +35,12 @@ std::vector<Double_t> friisCorrection(const std::vector<Double_t>& ps,
 inline void dBConversion(std::vector<double>& ps){
   for(UInt_t i=0; i < ps.size(); i++){
     // ps[i] = 10*TMath::Log10(ps.at(i)/10);
-    ps[i] = 10*TMath::Log10(ps.at(i)/10);    
+    // ps[i] = 10*TMath::Log10(ps.at(i)/10);
+    ps[i] = 10*TMath::Log10(ps.at(i));        
   }
 }
 
-inline void unbBConversion(std::vector<double>& ps){
+inline void undBConversion(std::vector<double>& ps){
   for(UInt_t i=0; i < ps.size(); i++){
     // ps[i] = 10*TMath::Log10(ps.at(i)/10);
     // ps[i] = 10*TMath::Log10(ps.at(i)/10);
@@ -66,7 +69,7 @@ int main(){
 
   SeaveyDataHandler sData(8192*2);
   sData.kPrintWarnings = 1;
-
+  
   // Channel 1 is aligned, channel 4 is cross-pol
   Int_t channel = 1;
 
@@ -80,6 +83,23 @@ int main(){
 
   TFile* fOut = new TFile("makeAntennaInformationPlots.root", "recreate");
 
+
+  TGraph* grPulsePs = new TGraph();
+  grPulsePs->Set(sData.numFreqs); // alloc arrays in TGraph
+  std::vector<double> pulsePs(sData.numFreqs, 0);
+  for(int f=0; f < sData.numFreqs; f++){
+    pulsePs.at(f) = sData.fftwComplexPulseFreqs[f].getAbsSq();
+  }
+  dBConversion(pulsePs);
+  for(int f=0; f < sData.numFreqs; f++){  
+    grPulsePs->SetPoint(f, f*sData.deltaF, pulsePs.at(f));
+  }
+  grPulsePs->SetName("grPulsePs");
+  grPulsePs->SetTitle("Picosecond pulser frequency content; Frequency (Hz); Power (dB)");  
+  grPulsePs->Write();
+  delete grPulsePs;
+
+  
   ProgressBar p(1);
 
   const int numSeaveyPoints = 5;
@@ -121,8 +141,10 @@ int main(){
     grMeanGroupDelay[polInd]->SetName(grName);
     grMeanGroupDelay[polInd]->SetTitle(grTitle);
   }
-  
-  const Double_t minFreq = 160e6;
+
+
+  // const Double_t minFreq = 160e6;
+  const Double_t minFreq = 150e6;  
   // const double maxFreqs[AnitaPol::kNotAPol] = {1570e6, 1430e6};
   const double maxFreqs[AnitaPol::kNotAPol] = {1570e6, 1570e6};  
   
@@ -168,25 +190,46 @@ int main(){
       gr0->SetName(gr0Name);
       gr0->Write();
 
-      double dt = gr0->GetX()[1] - gr0->GetX()[0];
+      // double dt = gr0->GetX()[1] - gr0->GetX()[0];
       
-      FFTWComplex* seaveyToSeavey = sData.removeCopolResponse(gr0);
+      // FFTWComplex* seaveyToSeavey = sData.removeCopolResponse(gr0);
+      FFTWComplex* seaveyToSeavey = sData.doNormalizedFFT(gr0);
+
+      // std::cerr << seaveyToSeavey[1].re << "\t" << seaveyToSeavey[1].im << "\t"
+      // 		<< seaveyToSeavey[1].getAbsSq() << std::endl;
+      
       // std::cout << gr0->GetN() << std::endl;
 
       std::vector<Double_t> ps;
       std::vector<Double_t> phaseResponse;
       std::vector<Double_t> theseFreqs;
-
-      FFTWComplex* impulseRespFreq = new FFTWComplex[sData.numFreqs];
+      std::vector<Double_t> gain_dBi;
       
+      FFTWComplex* impulseRespFreq = new FFTWComplex[sData.numFreqs];
+
       for(int freqInd=0; freqInd < sData.numFreqs; freqInd++){
 	Double_t f = freqInd*sData.deltaF;
 	if(f >= minFreq && f < maxFreqs[polInd]){
 	  Double_t power = seaveyToSeavey[freqInd].getAbsSq();
-	  power /= dt;
+	  // power /= dt;
 
 	  ps.push_back(power);
 	  theseFreqs.push_back(f);
+
+	  // double PrOverPt = power/(sData.fftwComplexPsPulserCopolFast[freqInd].getAbsSq()/sData.dtCables);
+	  double PrOverPt = power/(sData.fftwComplexPsPulserCopolFast[freqInd].getAbsSq());
+
+	  double GrGt = PrOverPt*(partFactor*partFactor*f*f);
+	  // double gainSquared = PrOverPt;
+
+	  if(polInd==((int)AnitaPol::kVertical)){
+	    gain_dBi.push_back(TMath::Sqrt(GrGt));
+	  }
+	  else{
+	    const int i = gain_dBi.size();
+	    gain_dBi.push_back(GrGt/meanVPolGain.at(i));
+	  }
+	  // gain_dBi.push_back(TMath::Sqrt(gainSquared));
 
 	  Double_t phase = seaveyToSeavey[freqInd].getPhase();
 	  if(phase < -TMath::Pi()){
@@ -207,7 +250,10 @@ int main(){
 	}
       }
 
-      std::vector<Double_t> gain_dBi = friisCorrection(ps, theseFreqs, AnitaPol::AnitaPol_t (polInd));
+      // std::vector<Double_t> gain_dBi = friisCorrection(ps, theseFreqs, AnitaPol::AnitaPol_t (polInd));
+
+      // std::vector<double> gain_dBi = getGain(&sData, seaveyToSeavey, minFreq, maxFreqs[polInd]);
+      
       if(polInd==AnitaPol::kVertical){
 	if(meanVPolGain.size()==0){
 	  meanVPolGain = gain_dBi;
@@ -244,7 +290,6 @@ int main(){
       convertXaxisFromHzToMHz(gr0Gain);
       gr0Gain->Write();
       delete gr0Gain;
-      
 
       TGraph* gr0Phase = new TGraph(phaseResponse.size(), &theseFreqs[0], &phaseResponse[0]);
       gr0Phase->SetName(gr0Name + "Phase");
@@ -470,6 +515,8 @@ int main(){
 	      }
 	    }
 	  }
+
+
       
 	  dBConversion(gain_dBi);
 	  dBConversion(ps);
@@ -567,8 +614,6 @@ std::vector<Double_t> friisCorrection(const std::vector<Double_t>& ps,
 				      const std::vector<Double_t>& freqs,
 				      AnitaPol::AnitaPol_t pol){
 
-  const double partFactor = 4*TMath::Pi()*(phaseCenterToPhaseCenterSeparationMeters)/c;
-  
   std::vector<Double_t> gain_dBi(ps.size(), 0);
   
   // separationFactors = [(f*4*math.pi*distMeters/c)**2 for f in freqsMHz]
@@ -590,11 +635,3 @@ std::vector<Double_t> friisCorrection(const std::vector<Double_t>& ps,
   }
   return gain_dBi;
 }
-
-
-
-
-  
-  
-
-// }
