@@ -27,7 +27,6 @@ const double phaseCenterToPhaseCenterSeparationMeters = faceToFaceSeparationMete
 
 const double partFactor = 4*TMath::Pi()*(phaseCenterToPhaseCenterSeparationMeters)/c;
 
-
 std::vector<Double_t> friisCorrection(const std::vector<Double_t>& ps,
 				      const std::vector<Double_t>& freqs,
 				      AnitaPol::AnitaPol_t pol);
@@ -63,6 +62,7 @@ inline void convertXaxisFromHzToMHz(TGraph* gr){
 }
 
 std::vector<double> meanVPolGain;
+std::vector<double> meanHPolGain;
 std::vector<double> meanVPolGroupDelay;
 
 int main(){
@@ -83,7 +83,7 @@ int main(){
 
   TFile* fOut = new TFile("makeAntennaInformationPlots.root", "recreate");
 
-
+  
   TGraph* grPulsePs = new TGraph();
   grPulsePs->Set(sData.numFreqs); // alloc arrays in TGraph
   std::vector<double> pulsePs(sData.numFreqs, 0);
@@ -112,7 +112,7 @@ int main(){
 
   grSeaveyNumsVPol->SetName("grSeaveyNumsVPol");
   grSeaveyNumsVPol->Write();
-  
+
   grSeaveyNumsHPol->SetName("grSeaveyNumsHPol");
   grSeaveyNumsHPol->Write();
 
@@ -125,14 +125,13 @@ int main(){
 
   TGraph* grMeanGaindBi[AnitaPol::kNotAPol] = {NULL};
   TGraph* grMeanGroupDelay[AnitaPol::kNotAPol] = {NULL};
-  for(int polInd = 0; polInd < AnitaPol::kNotAPol; polInd++){  
+  for(int polInd = 0; polInd < AnitaPol::kNotAPol; polInd++){
     grMeanGaindBi[polInd] = new TGraph();
     TString grName = polInd == AnitaPol::kHorizontal ? "grMeanGaindBiHPol" : "grMeanGaindBiVPol";
     TString grTitle = polInd == AnitaPol::kHorizontal ? "Mean HPol Gain" : "Mean VPol Gain";
     grTitle += "; Frequency (MHz); Gain (dBi)";
     grMeanGaindBi[polInd]->SetName(grName);
     grMeanGaindBi[polInd]->SetTitle(grTitle);
-
 
     grMeanGroupDelay[polInd] = new TGraph();
     grName = polInd == AnitaPol::kHorizontal ? "grMeanGroupDelayHPol" : "grMeanGroupDelayVPol";
@@ -229,7 +228,7 @@ int main(){
 	    const int i = gain_dBi.size();
 	    gain_dBi.push_back(GrGt/meanVPolGain.at(i));
 	  }
-	  // gain_dBi.push_back(TMath::Sqrt(gainSquared));
+	  // gain_dBi.push_back(TMath::Sqrt(GrGt));
 
 	  Double_t phase = seaveyToSeavey[freqInd].getPhase();
 	  if(phase < -TMath::Pi()){
@@ -264,6 +263,16 @@ int main(){
 	  }
 	}
       }
+      else{
+	if(meanHPolGain.size()==0){
+	  meanHPolGain = gain_dBi;
+	}
+	else{
+	  for(UInt_t i=0; i < gain_dBi.size(); i++){
+	    meanHPolGain.at(i) += gain_dBi.at(i);
+	  }
+	}
+      }      
       
       dBConversion(gain_dBi);
       dBConversion(ps);
@@ -279,7 +288,7 @@ int main(){
 	}
       }
       else{
-	for(int i=0; i < gr0GaindBi->GetN(); i++){	
+	for(int i=0; i < gr0GaindBi->GetN(); i++){
 	  grMeanGaindBi[polInd]->GetY()[i] += gr0GaindBi->GetY()[i];
 	}
       }
@@ -421,8 +430,12 @@ int main(){
     delete grMeanGaindBi[polInd];
     delete grMeanGroupDelay[polInd];
   }
-  
+
+
   for(int polInd = AnitaPol::kVertical; polInd >= AnitaPol::kHorizontal; polInd--){
+
+    TGraphPolar* grAzTot = new TGraphPolar();
+    TGraphPolar* grElTot = new TGraphPolar();    
 
     AnitaPol::AnitaPol_t pol = AnitaPol::AnitaPol_t(polInd);
     
@@ -432,16 +445,16 @@ int main(){
 
       TGraph2D* grMeanGain2D = new TGraph2D();
       TGraphPolar* grAz = new TGraphPolar();
-      TGraphPolar* grEl = new TGraphPolar();      
+      TGraphPolar* grEl = new TGraphPolar();
       
       double theBoresightVal = 0;
       double minVal = DBL_MAX;
+      double maxVal = -DBL_MAX;      
       for(int az=-45; az <=45; az+=15){
 	for(int el=-45; el <=45; el+=15){
 	  if(antNumber==26 && el==30){
 	    continue;
 	  }
-
 	  
 	  sData.kPrintWarnings = 0;
 	  TGraph* gr0 = sData.getOffAxisGraphFromTFile(antNumber, channel, pol, az, el);
@@ -451,7 +464,6 @@ int main(){
 	    continue;
 	  }
 
-	  
 	  sData.doNoiseSubtraction(gr0, antNumber, channel, pol);
 	  sData.windowPulse(gr0, timeBefore, timeAfter);
 
@@ -466,10 +478,12 @@ int main(){
 	  gr0->SetName(gr0Name);
 	  gr0->Write();
 
-	  double dt = gr0->GetX()[1] - gr0->GetX()[0];
+	  // double dt = gr0->GetX()[1] - gr0->GetX()[0];
 
-	  FFTWComplex* seaveyToSeavey = sData.removeCopolResponse(gr0);
+	  // FFTWComplex* seaveyToSeavey = sData.removeCopolResponse(gr0);
+	  FFTWComplex* seaveyToSeavey = sData.removeCopolResponse(gr0);	
 	  std::vector<Double_t> ps;
+	  std::vector<Double_t> gain;
 	  std::vector<Double_t> phaseResponse;
 	  std::vector<Double_t> theseFreqs;
 
@@ -479,11 +493,20 @@ int main(){
 	    Double_t f = freqInd*sData.deltaF;
 	    if(f >= minFreq && f < maxFreqs[polInd]){
 	      Double_t power = seaveyToSeavey[freqInd].getAbsSq();
-	      power /= dt;
+	      // power /= dt;
 
 	      ps.push_back(power);
 	      theseFreqs.push_back(f);
+	      double PrOverPt = power/(sData.fftwComplexPsPulserCopolFast[freqInd].getAbsSq());
 
+	      double GrGt = PrOverPt;//*(partFactor*partFactor*f*f);
+	      // double gainSquared = PrOverPt;
+
+	      // const int i = gain.size();
+	      // gain.push_back(GrGt/meanVPolGain.at(i));
+
+	      gain.push_back(TMath::Sqrt(GrGt));
+	      
 	      Double_t phase = seaveyToSeavey[freqInd].getPhase();
 	      if(phase < -TMath::Pi()){
 		phase += TMath::TwoPi();
@@ -502,30 +525,15 @@ int main(){
 	      impulseRespFreq[freqInd].im = 0;
 	    }
 	  }
-      
-      
-	  std::vector<Double_t> gain_dBi = friisCorrection(ps, theseFreqs, AnitaPol::AnitaPol_t (polInd));
-	  if(polInd==AnitaPol::kVertical){
-	    if(meanVPolGain.size()==0){
-	      meanVPolGain = gain_dBi;
-	    }
-	    else{
-	      for(UInt_t i=0; i < gain_dBi.size(); i++){
-	  	meanVPolGain.at(i) += gain_dBi.at(i);
-	      }
-	    }
-	  }
 
-
-      
-	  dBConversion(gain_dBi);
+	  dBConversion(gain);
 	  dBConversion(ps);
 
-	  TGraph* gr0GaindBi = new TGraph(gain_dBi.size(), &theseFreqs[0], &gain_dBi[0]);
-	  gr0GaindBi->SetName(gr0Name + "GaindBi");
-	  convertXaxisFromHzToMHz(gr0GaindBi);
-	  gr0GaindBi->Write();
-	  delete gr0GaindBi;
+	  TGraph* gr0Gain1 = new TGraph(gain.size(), &theseFreqs[0], &gain[0]);
+	  gr0Gain1->SetName(gr0Name + "Gain1");
+	  convertXaxisFromHzToMHz(gr0Gain1);
+	  gr0Gain1->Write();
+	  delete gr0Gain1;
 
 
 	  TGraph* gr0Gain = new TGraph(ps.size(), &theseFreqs[0], &ps[0]);
@@ -564,8 +572,11 @@ int main(){
 	    minVal = mean;
 	    // minVal = 0;	    
 	  }
-	  
-	  
+	  if(mean > maxVal){
+	    maxVal = mean;
+	    // minVal = 0;	    
+	  }	  
+	  	  
 	  grMeanGain2D->SetPoint(grMeanGain2D->GetN(), az, el, mean);
 	  
 	  delete gr0;
@@ -577,7 +588,7 @@ int main(){
 
       for(int samp=0; samp < grMeanGain2D->GetN(); samp++){
 	// grMeanGain2D->GetZ()[samp] -= theBoresightVal;
-	grMeanGain2D->GetZ()[samp] -= minVal;
+	grMeanGain2D->GetZ()[samp] -= maxVal;
       }
       grMeanGain2D->Write();
       delete grMeanGain2D;
@@ -587,7 +598,9 @@ int main(){
 
       for(int samp=0; samp < grAz->GetN(); samp++){
 	// grAz->GetY()[samp] -= theBoresightVal;
-	grAz->GetY()[samp] -= minVal;	
+	// grAz->GetY()[samp] -= minVal;
+	grAz->GetY()[samp] -= maxVal;
+	grAzTot->SetPoint(grAzTot->GetN(), grAz->GetX()[samp] , grAz->GetY()[samp]);
       }
       grAz->Write();
       delete grAz;
@@ -597,11 +610,23 @@ int main(){
 
       for(int samp=0; samp < grEl->GetN(); samp++){
 	// grEl->GetY()[samp] -= theBoresightVal;
-	grEl->GetY()[samp] -= minVal;
+	grEl->GetY()[samp] -= maxVal;
+	grElTot->SetPoint(grElTot->GetN(), grEl->GetX()[samp] , grEl->GetY()[samp]);	
       }
       grEl->Write();
       delete grEl;
     }
+
+
+    TString grAzName = TString::Format("grAzTot_%d", polInd);
+    grAzTot->SetName(grAzName);
+    grAzTot->Write();
+    delete grAzTot;
+
+    TString grElName = TString::Format("grElTot_%d", polInd);
+    grElTot->SetName(grElName);
+    grElTot->Write();
+    delete grElTot;
   }
   
   fOut->Write();
